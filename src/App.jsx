@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
-import { supabase, supabaseReady, ADMIN_EMAIL, STORE_WHATSAPP } from "./supabase";
+import { supabase, supabaseReady, ADMIN_EMAIL, STORE_WHATSAPP } from "../supabase";
 
 const categories = [
   "All", "Rice & Atta", "Dals & Pulses", "Oils & Ghee", "Spices & Masalas",
