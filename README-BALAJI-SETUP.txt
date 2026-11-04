@@ -26,3 +26,7 @@ Never put Supabase Secret/service_role keys in this project or share them. The p
 
 ADMIN PASSWORD LOGIN
 The Admin screen now uses email + password (no email login link). In Supabase Dashboard open Authentication > Users > Add user > Create new user. Enter vijay.ca444@gmail.com and set a strong password that only you know. Confirm/create the user, then use that same email and password on the website Admin login. Do not put the password in .env or share it in chat.
+
+
+PRODUCT PHOTOS
+83 locally stored product photo files are included under public/products. The homepage banner is public/kirana-shop-banner.png. These assets load locally and do not depend on LoremFlickr.
