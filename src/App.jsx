@@ -116,10 +116,13 @@ const productPhotoTags = {
 };
 const productPhotoUrl = product => {
   if (product.imageUrl) return product.imageUrl;
-  const slug = String(product.name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  return `/products/${slug}.webp`;
+  const productId = Number(product.id);
+  if (Number.isInteger(productId) && productId >= 1 && productId <= 83) {
+    return `/products/${String(productId).padStart(3, "0")}.webp`;
+  }
+  return "";
 };
-const heroPhotoUrl = "/kirana-shop-banner.png";
+const heroPhotoUrl = "/kirana-hero.png";
 const statuses = ["Order Received", "Estimate Sent", "Customer Confirmed", "Preparing", "Out for Delivery", "Delivered", "Cancelled"];
 
 export default function App() {
@@ -369,7 +372,7 @@ export default function App() {
             <button className="primary-button" onClick={() => document.getElementById("products")?.scrollIntoView({ behavior: "smooth" })}>Browse products →</button>
             <span className="hero-note">✓ No online prices · Personalised quotation · Confirm before delivery</span>
           </div>
-          <div className="hero-image hero-photo" style={{backgroundImage:`linear-gradient(0deg,rgba(20,35,18,.62),rgba(20,35,18,.04)),url(${heroPhotoUrl})`}}><div className="fresh-badge">FRESH<br />DAILY</div><div className="image-caption">Good things <small>for every home.</small></div></div>
+          <div className="hero-image hero-photo" style={{backgroundImage:`linear-gradient(0deg,rgba(20,35,18,.62),rgba(20,35,18,.04)),url(${heroPhotoUrl})`}}><div className="fresh-badge">FRESH<br />DAILY</div></div>
         </section>
         <section className="benefits">
           <div>📝 <b>Easy order requests</b><small>Select products and quantities</small></div>

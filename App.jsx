@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
-import { supabase, supabaseReady, ADMIN_EMAIL, STORE_WHATSAPP } from "../supabase";
+import { supabase, supabaseReady, ADMIN_EMAIL, STORE_WHATSAPP } from "./supabase";
 
 const categories = [
   "All", "Rice & Atta", "Dals & Pulses", "Oils & Ghee", "Spices & Masalas",
@@ -26,100 +26,6 @@ const initialProducts = [
 ].map((p, i) => ({ id: i + 1, name: p[0], category: p[1], emoji: p[2], unit: p[3] }));
 
 const money = n => "₹" + Number(n || 0).toFixed(2);
-
-// Product-specific real-photo searches. Each item gets its own keyword and lock ID.
-// Photos are sourced from Flickr through LoremFlickr (not AI-generated).
-const productPhotoTags = {
-  "Sona Masoori Rice": "sona masoori rice",
-  "Basmati Rice": "basmati rice",
-  "Brown Rice": "brown rice grains",
-  "Wheat Atta": "wheat flour",
-  "Maida": "maida flour",
-  "Rava / Sooji": "semolina sooji",
-  "Toor Dal": "toor dal pigeon peas",
-  "Moong Dal": "moong dal mung beans",
-  "Masoor Dal": "masoor dal red lentils",
-  "Chana Dal": "chana dal split chickpeas",
-  "Urad Dal": "urad dal black gram",
-  "Rajma": "rajma kidney beans",
-  "Kabuli Chana": "kabuli chana chickpeas",
-  "Sunflower Oil": "sunflower cooking oil bottle",
-  "Groundnut Oil": "groundnut peanut oil bottle",
-  "Rice Bran Oil": "rice bran cooking oil bottle",
-  "Coconut Oil": "coconut oil bottle",
-  "Cow Ghee": "indian cow ghee bowl",
-  "Red Chilli Powder": "red chilli powder spice",
-  "Turmeric Powder": "turmeric powder spice",
-  "Coriander Powder": "coriander powder spice",
-  "Cumin Seeds": "cumin seeds jeera",
-  "Mustard Seeds": "mustard seeds rai",
-  "Garam Masala": "garam masala spice powder",
-  "Sambar Powder": "sambar masala powder",
-  "Sugar": "white sugar crystals",
-  "Jaggery": "jaggery gur blocks",
-  "Iodised Salt": "table salt crystals",
-  "Rock Salt": "rock salt pink salt",
-  "Marie Biscuits": "marie biscuits",
-  "Cream Biscuits": "cream sandwich biscuits",
-  "Cookies": "cookies biscuits",
-  "Potato Chips": "potato chips crisps",
-  "Mixture": "indian namkeen mixture snack",
-  "Peanuts": "peanuts groundnuts",
-  "Popcorn": "popcorn bowl",
-  "Milk Chocolate": "milk chocolate pieces",
-  "Tea Powder": "black tea leaves powder",
-  "Instant Coffee": "instant coffee granules",
-  "Fresh Milk": "fresh milk glass bottle",
-  "Curd": "indian curd yogurt bowl",
-  "Butter": "butter block",
-  "Paneer": "paneer cubes indian cottage cheese",
-  "Bread": "fresh sliced bread loaf",
-  "Rusk": "tea rusk toast",
-  "Apple": "red apples fruit",
-  "Banana": "ripe bananas fruit",
-  "Orange": "fresh oranges fruit",
-  "Grapes": "fresh grapes bunch",
-  "Mango": "ripe mango fruit",
-  "Potato": "fresh potatoes vegetable",
-  "Onion": "red onions vegetable",
-  "Tomatoes": "fresh red tomatoes vegetable",
-  "Carrot": "fresh carrots vegetable",
-  "Green Chilli": "green chilli peppers",
-  "Coriander Leaves": "fresh coriander cilantro leaves",
-  "Bathing Soap": "bar bathing soap",
-  "Handwash": "liquid hand wash bottle",
-  "Shampoo": "shampoo bottle",
-  "Hair Oil": "hair oil bottle",
-  "Toothpaste": "toothpaste tube",
-  "Toothbrush": "toothbrush",
-  "Floor Cleaner": "floor cleaning liquid bottle",
-  "Toilet Cleaner": "toilet cleaner bottle",
-  "Dishwash Liquid": "dishwashing liquid bottle",
-  "Dishwash Bar": "dishwashing soap bar",
-  "Detergent Powder": "laundry detergent powder",
-  "Fabric Softener": "fabric softener bottle",
-  "Steel Plates": "stainless steel dinner plates",
-  "Storage Containers": "kitchen food storage containers",
-  "Agarbatti": "incense sticks agarbatti",
-  "Camphor": "camphor cubes kapoor",
-  "Baby Powder": "baby talcum powder bottle",
-  "Baby Soap": "baby soap bar",
-  "Mineral Water": "mineral water bottle",
-  "Soft Drinks": "soft drink glass bottle",
-  "Noodles": "instant noodles bowl",
-  "Ready Mix": "indian instant food mix",
-  "Cashew Nuts": "cashew nuts",
-  "Almonds": "almonds nuts",
-  "Raisins": "raisins dried grapes",
-  "Pet Food": "dry pet food kibble",
-  "Notebook": "paper notebook stationery"
-};
-const productPhotoUrl = product => {
-  if (product.imageUrl) return product.imageUrl;
-  const slug = String(product.name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  return `/products/${slug}.webp`;
-};
-const heroPhotoUrl = "/kirana-shop-banner.png";
 const statuses = ["Order Received", "Estimate Sent", "Customer Confirmed", "Preparing", "Out for Delivery", "Delivered", "Cancelled"];
 
 export default function App() {
@@ -143,7 +49,6 @@ export default function App() {
   const [submittedOrderId, setSubmittedOrderId] = useState("");
   const [customer, setCustomer] = useState({ name: "", phone: "", address: "" });
   const [customItem, setCustomItem] = useState("");
-  const [customQty, setCustomQty] = useState("1");
   const [customItems, setCustomItems] = useState([]);
   const [adminEmail, setAdminEmail] = useState(ADMIN_EMAIL);
   const [adminPassword, setAdminPassword] = useState("");
@@ -215,8 +120,7 @@ export default function App() {
   ), [products, category, search]);
   const cartItems = products.filter(p => cart[p.id] > 0);
   const count = Object.values(cart).reduce((a, b) => a + b, 0);
-  const customCount = customItems.reduce((sum, item) => sum + Number(item.quantity || 1), 0);
-  const totalCartCount = count + customCount;
+  const customCount = customItems.length;
 
   function showNotice(message) { setNotice(message); setTimeout(() => setNotice(""), 3000); }
   function changeQty(id, amount) {
@@ -228,7 +132,7 @@ export default function App() {
   }
   function addCustomItem(e) {
     e.preventDefault();
-    if (customItem.trim()) { setCustomItems(old => [...old, { name: customItem.trim(), quantity: Math.max(1, Number(customQty) || 1) }]); setCustomItem(""); setCustomQty("1"); showNotice("Item added to cart."); }
+    if (customItem.trim()) { setCustomItems(old => [...old, customItem.trim()]); setCustomItem(""); showNotice("Item request added."); }
   }
   function submitOrder(e) {
     e.preventDefault();
@@ -240,7 +144,7 @@ export default function App() {
       id: "BH" + Date.now().toString().slice(-8),
       customer: { ...customer },
       items: cartItems.map(p => ({ ...p, quantity: cart[p.id], quotedPrice: "" })),
-      customItems: customItems.map(item => ({ ...item, quotedPrice: "" })),
+      customItems: customItems.map(name => ({ name, quantity: 1, quotedPrice: "" })),
       deliveryLocation, total: null, status: "Order Received", date: new Date().toLocaleString("en-IN")
     };
     if (supabaseReady) {
@@ -328,23 +232,6 @@ export default function App() {
   }
 
   return (
-    <>
-    <style>{`.product-picture {
-  overflow: hidden;
-  position: relative;
-}
-.product-picture img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  min-height: 150px;
-  object-fit: cover;
-  border-radius: inherit;
-}
-.photo-unavailable-label { display:none; min-height:150px; place-items:center; color:#687568; font-size:.85rem; }
-.product-picture.photo-unavailable .photo-unavailable-label { display:grid; }
-.hero-photo { background-size:cover; background-position:center; background-repeat:no-repeat; }
-}`}</style>
     <div className="app-shell">
       {!supabaseReady && <div className="top-strip">Setup required: configure Supabase environment variables before accepting live orders.</div>}
       <div className="top-strip">Fresh groceries • Everyday essentials • Delivered with care <span>Welcome to your neighbourhood store</span></div>
@@ -356,7 +243,7 @@ export default function App() {
           onChange={e => { setSearch(e.target.value); setView("shop"); }} />
         <div className="header-actions">
           <button onClick={() => { setView("admin"); setAdmin(false); }}>♙ Admin</button>
-          <button className="cart-button" onClick={() => setCheckout(true)}>🛒 Cart <b>{totalCartCount}</b></button>
+          <button className="cart-button" onClick={() => setCheckout(true)}>🛍️ Request <b>{count + customCount}</b></button>
         </div>
       </header>
 
@@ -369,7 +256,7 @@ export default function App() {
             <button className="primary-button" onClick={() => document.getElementById("products")?.scrollIntoView({ behavior: "smooth" })}>Browse products →</button>
             <span className="hero-note">✓ No online prices · Personalised quotation · Confirm before delivery</span>
           </div>
-          <div className="hero-image hero-photo" style={{backgroundImage:`linear-gradient(0deg,rgba(20,35,18,.62),rgba(20,35,18,.04)),url(${heroPhotoUrl})`}}><div className="fresh-badge">FRESH<br />DAILY</div><div className="image-caption">Good things <small>for every home.</small></div></div>
+          <div className="hero-image"><div className="fresh-badge">FRESH<br />DAILY</div><div className="produce">🥬 🍅 🥒 🥕<br />🫑 🥑 🥦 🍆<br />🥔 🧅 🧄 🌽</div></div>
         </section>
         <section className="benefits">
           <div>📝 <b>Easy order requests</b><small>Select products and quantities</small></div>
@@ -386,15 +273,15 @@ export default function App() {
         <section className="products-section" id="products">
           <div className="section-heading"><div><span className="eyebrow">ADD WHAT YOU NEED</span><h2>{category === "All" ? "Browse all products" : category}</h2></div><span>{filteredProducts.length} items</span></div>
           <div className="product-grid">{filteredProducts.map(p => <article className="product-card" key={p.id}>
-            <div className="product-picture"><img src={productPhotoUrl(p)} alt={`Real photo of ${p.name}`} loading="lazy" onError={e => { e.currentTarget.style.display = "none"; e.currentTarget.parentElement.classList.add("photo-unavailable"); }} /><span className="photo-unavailable-label">Photo unavailable</span></div><div className="product-info"><small>{p.category}</small><h3>{p.name}</h3><p>{p.unit}</p>
-              <div className="product-bottom"><b>Add to cart</b>{cart[p.id] ? <div className="quantity"><button onClick={() => changeQty(p.id, -1)}>−</button><b>{cart[p.id]}</b><button onClick={() => changeQty(p.id, 1)}>+</button></div> : <button className="add-button" onClick={() => changeQty(p.id, 1)}>＋ Add</button>}</div>
+            <div className="product-picture"><img src={p.imageUrl || (Number(p.id) >= 1 && Number(p.id) <= 83 ? `/products/${String(p.id).padStart(3, "0")}.webp` : "")} alt={p.name} loading="lazy" onError={e => { e.currentTarget.style.display = "none"; }} /></div><div className="product-info"><small>{p.category}</small><h3>{p.name}</h3><p>{p.unit}</p>
+              <div className="product-bottom"><b>Request item</b>{cart[p.id] ? <div className="quantity"><button onClick={() => changeQty(p.id, -1)}>−</button><b>{cart[p.id]}</b><button onClick={() => changeQty(p.id, 1)}>+</button></div> : <button className="add-button" onClick={() => changeQty(p.id, 1)}>＋ Add</button>}</div>
             </div></article>)}</div>
           {!filteredProducts.length && <p className="empty">No products found. Try another search or request it below.</p>}
         </section>
         <section className="custom-section"><div><span className="eyebrow">CAN'T FIND WHAT YOU NEED?</span><h2>Request any other item</h2><p>Type a product that is not listed. We will check availability and include it in your estimate.</p></div>
-          <form onSubmit={addCustomItem}><input value={customItem} onChange={e => setCustomItem(e.target.value)} placeholder="Enter item name..." required /><input aria-label="Quantity" type="number" min="1" step="1" value={customQty} onChange={e => setCustomQty(e.target.value)} style={{maxWidth:110}} /><button className="primary-button">Add to cart</button></form>
+          <form onSubmit={addCustomItem}><input value={customItem} onChange={e => setCustomItem(e.target.value)} placeholder="Enter item name..." /><button className="primary-button">Add item</button></form>
         </section>
-        {customItems.length > 0 && <p className="custom-added">Requested: {customItems.map(item => `${item.name} × ${item.quantity}`).join(", ")} <button onClick={() => setCustomItems([])}>Clear</button></p>}
+        {customItems.length > 0 && <p className="custom-added">Requested: {customItems.join(", ")} <button onClick={() => setCustomItems([])}>Clear</button></p>}
       </main>}
 
       {view === "admin" && <main className="admin-page">
@@ -424,8 +311,8 @@ export default function App() {
               {showDeleted && (deletedOrders.length ? deletedOrders.map(o => <div className="order-card" key={o.id}><div className="order-top"><b>{o.id}</b><span>Deleted: {o.deletedAt || "—"}</span><strong>{o.status}</strong></div><p>{o.customer?.name} · {o.customer?.phone}</p><div className="deleted-actions"><button className="primary-button" type="button" onClick={() => restoreOrder(o.id)}>Restore order</button><button className="delete-order-button" type="button" onClick={() => permanentlyDeleteOrder(o.id)}>Permanently delete</button></div></div>) : <p className="empty">No deleted orders.</p>)}
             </section>
             <section className="panel"><h2>Manage product catalogue</h2><p className="delivery-note">Add products available in your shop. No prices are shown to customers.</p>
-              <form className="add-product-form" onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); const name = String(f.get("name")).trim(); if (!name) return; const product = {id:Date.now(),name,category:f.get("category"),unit:f.get("unit") || "Piece",emoji:"🛒",imageUrl:String(f.get("imageUrl") || "").trim()}; setProducts(old => [...old,product]); if (supabaseReady) supabase.from("products").upsert({id:product.id,payload:product}); e.currentTarget.reset(); showNotice("Product added to catalogue."); }}>
-                <input name="name" placeholder="Product name" required /><input name="unit" placeholder="Unit e.g. 1 kg" /><input name="imageUrl" type="url" placeholder="Real product photo URL (optional)" /><select name="category">{categories.slice(1).map(c => <option key={c}>{c}</option>)}</select><button className="primary-button">Add product</button>
+              <form className="add-product-form" onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); const name = String(f.get("name")).trim(); if (!name) return; const product = {id:Date.now(),name,category:f.get("category"),unit:f.get("unit") || "Piece",emoji:"🛒"}; setProducts(old => [...old,product]); if (supabaseReady) supabase.from("products").upsert({id:product.id,payload:product}); e.currentTarget.reset(); showNotice("Product added to catalogue."); }}>
+                <input name="name" placeholder="Product name" required /><input name="unit" placeholder="Unit e.g. 1 kg" /><select name="category">{categories.slice(1).map(c => <option key={c}>{c}</option>)}</select><button className="primary-button">Add product</button>
               </form>
               {products.map(p => <div className="manage-product" key={p.id}><span>{p.emoji} {p.name} · {p.category}</span><button onClick={() => {if(window.confirm("Delete this product?")) setProducts(old => old.filter(x => x.id !== p.id));}}>Delete</button></div>)}
             </section>
@@ -434,25 +321,24 @@ export default function App() {
       </main>}
 
       {checkout && <div className="modal-backdrop" onClick={() => setCheckout(false)}><div className="checkout-modal" onClick={e => e.stopPropagation()}>
-        <button className="modal-close" onClick={() => setCheckout(false)}>✕</button><span className="eyebrow">BALAJI HOME NEEDS</span><h2>Your Cart</h2>
+        <button className="modal-close" onClick={() => setCheckout(false)}>✕</button><span className="eyebrow">BALAJI HOME NEEDS</span><h2>Your item request</h2>
         {!count && !customCount ? <p className="empty">Your request list is empty. Add products first.</p> : <>
           <p>Review your requested items. <b>No payment is collected now.</b> We will send an estimate to your WhatsApp.</p>
           <div className="checkout-items">{cartItems.map(p => <div key={p.id}><span>{p.emoji} {p.name} ({p.unit})</span><div className="quantity"><button onClick={() => changeQty(p.id,-1)}>−</button><b>{cart[p.id]}</b><button onClick={() => changeQty(p.id,1)}>+</button></div></div>)}</div>
-          {customItems.length > 0 && <div><b>Other requested items:</b>{customItems.map((item,i) => <p key={`${item.name}-${i}`}>• {item.name} × {item.quantity} <button type="button" onClick={() => setCustomItems(old => old.filter((_,idx)=>idx!==i))}>Remove</button></p>)}</div>}
+          {customItems.length > 0 && <div><b>Other requested items:</b>{customItems.map((name,i) => <p key={`${name}-${i}`}>• {name} <button type="button" onClick={() => setCustomItems(old => old.filter((_,idx)=>idx!==i))}>Remove</button></p>)}</div>}
           <p className="delivery-note">The store will check availability, add prices and send you an estimate on WhatsApp. Delivery is arranged only after you confirm.</p>
           <form className="customer-form" onSubmit={submitOrder}><h3>Your details</h3><input required placeholder="Your full name" value={customer.name} onChange={e=>setCustomer({...customer,name:e.target.value})}/><input required type="tel" maxLength="10" placeholder="10-digit WhatsApp mobile number" value={customer.phone} onChange={e=>setCustomer({...customer,phone:e.target.value.replace(/\D/g,"")})}/><textarea required placeholder="Full delivery address" value={customer.address} onChange={e=>setCustomer({...customer,address:e.target.value})}/>
             <div className="location-picker"><div><b>Share delivery location (optional)</b><p>Allow location access to help the store find your delivery address.</p></div><button type="button" className="location-button" onClick={captureLocation}>📍 {deliveryLocation ? "Update location" : "Use my current location"}</button>
               {locationMessage && <small>{locationMessage}</small>}
               {deliveryLocation && <div className="location-confirmed">✓ Location saved · <a href={`https://www.google.com/maps?q=${deliveryLocation.latitude},${deliveryLocation.longitude}`} target="_blank" rel="noreferrer">Preview on map</a> <button type="button" onClick={()=>setDeliveryLocation(null)}>Remove</button></div>}
             </div>
-            <button className="primary-button" type="submit">Send order for estimate</button></form>
+            <button className="primary-button" type="submit">Submit item request</button></form>
         </>}
       </div></div>}
-      {submittedOrderId && <div className="modal-backdrop" role="dialog" aria-modal="true"><div className="checkout-modal" style={{maxWidth:480,textAlign:"center"}}><div className="login-icon">✓</div><span className="eyebrow">REQUEST RECEIVED</span><h2>Thank you!</h2><p>Your order request has been submitted successfully. The store will check availability and send your estimate on WhatsApp.</p><div style={{padding:18,background:"#f4f7f1",borderRadius:12,margin:"18px 0"}}><small>YOUR ORDER ID</small><h2 style={{letterSpacing:2}}>{submittedOrderId}</h2><button type="button" className="back-button" onClick={() => { navigator.clipboard?.writeText(submittedOrderId); showNotice("Order ID copied."); }}>Copy Order ID</button></div><p><b>Please save your Order ID for future reference.</b></p><button className="primary-button" type="button" onClick={() => setSubmittedOrderId("")}>Close</button></div></div>}
+      {submittedOrderId && <div className="modal-backdrop" role="dialog" aria-modal="true"><div className="checkout-modal" style={{maxWidth:480,textAlign:"center"}}><div className="login-icon">✓</div><span className="eyebrow">REQUEST RECEIVED</span><h2>Thank you!</h2><p>Your grocery request has been submitted successfully. The store will check availability and send your estimate on WhatsApp.</p><div style={{padding:18,background:"#f4f7f1",borderRadius:12,margin:"18px 0"}}><small>YOUR ORDER ID</small><h2 style={{letterSpacing:2}}>{submittedOrderId}</h2><button type="button" className="back-button" onClick={() => { navigator.clipboard?.writeText(submittedOrderId); showNotice("Order ID copied."); }}>Copy Order ID</button></div><p><b>Please save your Order ID for future reference.</b></p><button className="primary-button" type="button" onClick={() => setSubmittedOrderId("")}>Close</button></div></div>}
       <footer><b>BALAJI HOME NEEDS</b><p>Everyday essentials, delivered with care.</p><small>© {new Date().getFullYear()} Balaji Home Needs. All rights reserved.</small></footer>
-      {count + customCount > 0 && view === "shop" && <button className="floating-cart" onClick={()=>setCheckout(true)}>🛒 View Cart · {totalCartCount} items</button>}
+      {count + customCount > 0 && view === "shop" && <button className="floating-cart" onClick={()=>setCheckout(true)}>🛒 Review request · {count+customCount} items</button>}
       {notice && <div className="toast">{notice}</div>}
     </div>
-    </>
   );
 }
