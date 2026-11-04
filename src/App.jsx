@@ -116,10 +116,10 @@ const productPhotoTags = {
 };
 const productPhotoUrl = product => {
   if (product.imageUrl) return product.imageUrl;
-  const tags = productPhotoTags[product.name] || product.name.toLowerCase();
-  return `https://loremflickr.com/640/480/${encodeURIComponent(tags)}?lock=${encodeURIComponent(product.id)}`;
+  const slug = String(product.name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return `/products/${slug}.webp`;
 };
-const heroPhotoUrl = "https://loremflickr.com/1200/850/fresh,vegetables,produce?lock=91827";
+const heroPhotoUrl = "/kirana-shop-banner.png";
 const statuses = ["Order Received", "Estimate Sent", "Customer Confirmed", "Preparing", "Out for Delivery", "Delivered", "Cancelled"];
 
 export default function App() {
