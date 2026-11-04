@@ -220,6 +220,22 @@ export default function App() {
   const count = Object.values(cart).reduce((a, b) => a + b, 0);
   const customCount = customItems.reduce((sum, item) => sum + Number(item.quantity || 1), 0);
   const totalCartCount = count + customCount;
+  const salesOrders = orders.filter(o => ["Customer Confirmed", "Preparing", "Out for Delivery", "Delivered"].includes(o.status));
+  const confirmedValue = salesOrders.reduce((sum, o) => sum + Number(o.total || getOrderValue(o)), 0);
+  const uniqueCustomers = new Set(salesOrders.map(o => (o.customer?.phone || o.customer?.name || "").toLowerCase())).size;
+  const productSales = Object.values(salesOrders.reduce((acc, order) => {
+    (order.items || []).forEach(item => { const key = item.name || "Product"; acc[key] = acc[key] || { name: key, qty: 0, value: 0 }; acc[key].qty += Number(item.quantity || 0); acc[key].value += Number(item.quotedPrice || 0) * Number(item.quantity || 0); });
+    return acc;
+  }, {})).sort((a, b) => b.qty - a.qty).slice(0, 6);
+  function getOrderValue(order) {
+    return [...(order.items || []), ...(order.customItems || [])].reduce((sum, item) => sum + Number(item.quotedPrice || 0) * Number(item.quantity || 1), 0);
+  }
+  function exportSalesCsv() {
+    const rows = [["Order ID", "Date", "Customer", "Phone", "Status", "Amount"], ...salesOrders.map(o => [o.id, o.date || "", o.customer?.name || "", o.customer?.phone || "", o.status, Number(o.total || getOrderValue(o)).toFixed(2)])];
+    const csv = rows.map(row => row.map(value => `"${String(value ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "balaji-sales-report.csv"; a.click(); URL.revokeObjectURL(url);
+  }
 
   function showNotice(message) { setNotice(message); setTimeout(() => setNotice(""), 3000); }
   function changeQty(id, amount) {
@@ -405,6 +421,13 @@ export default function App() {
           <>
             <div className="admin-heading"><div><span className="eyebrow">STORE MANAGEMENT</span><h1>Admin Dashboard</h1><p>Review requests, enter prices and send estimates on WhatsApp.</p></div><button className="back-button" onClick={() => { supabaseReady && supabase.auth.signOut(); setAdmin(false); setView("shop"); }}>← Store</button></div>
             <div className="stats-grid"><div><small>Total requests</small><h2>{orders.length}</h2></div><div><small>New requests</small><h2>{orders.filter(o => o.status === "Order Received").length}</h2></div><div><small>Awaiting confirmation</small><h2>{orders.filter(o => o.status === "Estimate Sent").length}</h2></div><div><small>Confirmed orders</small><h2>{orders.filter(o => ["Customer Confirmed","Preparing","Out for Delivery","Delivered"].includes(o.status)).length}</h2></div></div>
+            <section className="panel analytics-panel">
+              <div className="section-heading"><div><span className="eyebrow">BUSINESS OVERVIEW</span><h2>Retail performance</h2></div><button className="primary-button" type="button" onClick={exportSalesCsv}>Download sales CSV</button></div>
+              <p className="delivery-note">Sales figures include confirmed, preparing, out-for-delivery and delivered orders only. Pending estimates and cancelled orders are excluded.</p>
+              <div className="stats-grid"><div><small>Confirmed sales value</small><h2>{money(confirmedValue)}</h2></div><div><small>Confirmed orders</small><h2>{salesOrders.length}</h2></div><div><small>Unique customers</small><h2>{uniqueCustomers}</h2></div><div><small>Average order value</small><h2>{money(salesOrders.length ? confirmedValue / salesOrders.length : 0)}</h2></div></div>
+              <div className="section-heading"><h2>Top requested products</h2><span>By confirmed quantity</span></div>
+              {productSales.length ? <div className="sales-bars">{productSales.map(item => <div className="sales-bar-row" key={item.name}><div><b>{item.name}</b><span>{item.qty} units · {money(item.value)}</span></div><div className="sales-bar-track"><i style={{width: `${Math.max(4, item.qty / productSales[0].qty * 100)}%`}} /></div></div>)}</div> : <p className="empty">Confirmed sales data will appear here after customers confirm orders and item prices are entered.</p>}
+            </section>
             <section className="panel"><div className="section-heading"><h2>Customer order requests</h2><select value={orderFilter} onChange={e => setOrderFilter(e.target.value)}><option>All</option>{statuses.map(s => <option key={s}>{s}</option>)}</select></div>
               {!orders.filter(o => orderFilter === "All" || o.status === orderFilter).length && <p className="empty">No customer requests yet.</p>}
               {orders.filter(o => orderFilter === "All" || o.status === orderFilter).map(o => <div className="order-card" key={o.id}>

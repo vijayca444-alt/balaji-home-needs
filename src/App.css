@@ -37,3 +37,12 @@ input,textarea,select{border:1px solid #dce6da;border-radius:10px;padding:12px 1
 .delete-order-button{border:1px solid #f0c9c4;background:#fff2f0;color:#a83228;border-radius:9px;padding:10px 12px;font-weight:800}
 .deleted-actions{display:flex;gap:10px;flex-wrap:wrap}
 @media(max-width:700px){.location-button{width:100%}.deleted-actions>*{flex:1}}
+
+/* Retail analytics dashboard */
+.analytics-panel .stats-grid { margin: 18px 0 26px; }
+.sales-bars { display: grid; gap: 15px; margin-top: 16px; }
+.sales-bar-row { display: grid; gap: 7px; }
+.sales-bar-row > div:first-child { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.sales-bar-row span { color: #687568; font-size: .88rem; }
+.sales-bar-track { height: 11px; background: #edf1e9; border-radius: 20px; overflow: hidden; }
+.sales-bar-track i { display: block; height: 100%; background: linear-gradient(90deg,#527b43,#9ab86d); border-radius: inherit; }
