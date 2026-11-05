@@ -129,9 +129,9 @@ const productPhotoUrl = product => {
 const heroPhotoUrl = "/kirana-hero.png";
 const statuses = ["Order Received", "Estimate Sent", "Customer Confirmed", "Preparing", "Out for Delivery", "Delivered", "Cancelled"];
 const recipeBook = [
-  { id:"sambar", name:"South Indian Sambar", cuisine:"Tamil Nadu", servings:4, ingredients:[["Toor Dal","1 cup (200 g)","500 g"],["Turmeric Powder","½ tsp","100 g"],["Sambar Powder","2 tbsp","100 g"],["Tomatoes","2 medium","1 kg"],["Onion","1 medium","1 kg"]] },
+  { id:"sambar", name:"South Indian Sambar", cuisine:"South Indian", servings:4, ingredients:[["Toor Dal","1 cup (200 g)","500 g"],["Turmeric Powder","½ tsp","100 g"],["Sambar Powder","2 tbsp","100 g"],["Tomatoes","2 medium","1 kg"],["Onion","1 medium","1 kg"]] },
   { id:"lemon-rice", name:"Lemon Rice", cuisine:"South Indian", servings:4, ingredients:[["Sona Masoori Rice","2 cups (400 g)","1 kg"],["Peanuts","2 tbsp (25 g)","250 g"],["Turmeric Powder","½ tsp","100 g"],["Mustard Seeds","1 tsp","100 g"]] },
-  { id:"pongal", name:"Ven Pongal", cuisine:"Tamil Nadu", servings:4, ingredients:[["Sona Masoori Rice","1 cup (200 g)","1 kg"],["Moong Dal","½ cup (100 g)","500 g"],["Cumin Seeds","1 tsp","100 g"],["Cow Ghee","2 tbsp","500 ml"]] },
+  { id:"pongal", name:"Ven Pongal", cuisine:"South Indian", servings:4, ingredients:[["Sona Masoori Rice","1 cup (200 g)","1 kg"],["Moong Dal","½ cup (100 g)","500 g"],["Cumin Seeds","1 tsp","100 g"],["Cow Ghee","2 tbsp","500 ml"]] },
   { id:"chana", name:"Chana Masala", cuisine:"North Indian", servings:4, ingredients:[["Kabuli Chana","1 cup (200 g)","500 g"],["Onion","2 medium","1 kg"],["Tomatoes","2 medium","1 kg"],["Garam Masala","1 tsp","100 g"],["Coriander Powder","1 tbsp","200 g"]] }
 ];
 // Balaji Home Needs shop location supplied by the owner.
@@ -186,7 +186,7 @@ export default function App() {
   const [adminProductSearch, setAdminProductSearch] = useState("");
   const [dukandarQuestion, setDukandarQuestion] = useState("");
   const [dukandarReply, setDukandarReply] = useState("Vanakkam! Tell me what you need. I can help find items in our store catalogue.");
-  const [recipeImportText, setRecipeImportText] = useState("");
+  const [dukandarOpen, setDukandarOpen] = useState(false);
 
   useEffect(() => { localStorage.setItem("balaji_products", JSON.stringify(products)); }, [products]);
   useEffect(() => { localStorage.setItem("balaji_orders", JSON.stringify(orders)); }, [orders]);
@@ -327,41 +327,10 @@ export default function App() {
     } else {
       setCustomItem(dukandarQuestion);
       setDukandarReply("I couldn't find an exact match. I've copied your request into the item-request box for the shopkeeper to confirm.");
-      document.getElementById("custom-request")?.scrollIntoView({ behavior:"smooth", block:"center" });
+      setView("shop");
+      setTimeout(() => document.getElementById("custom-request")?.scrollIntoView({ behavior:"smooth", block:"center" }), 100);
     }
     setDukandarQuestion("");
-  }
-  function importHelloKitchenIngredients(e) {
-    e.preventDefault();
-    const pasted = recipeImportText.trim();
-    if (!pasted) { showNotice("Paste the ingredient list from Hello Kitchen first."); return; }
-    const chunks = pasted
-      .replace(/\r/g, "\n")
-      .split(/\n|,|;|\u2022/)
-      .map(x => x.replace(/^[-*\s]+/, "").trim())
-      .filter(Boolean);
-    const parsed = chunks.map(chunk => {
-      const match = chunk.match(/^(\d+(?:\.\d+)?\s*(?:cups?|tbsp|tablespoons?|tsp|teaspoons?|kg|kgs|g|grams?|ml|l|litres?|liters?|medium|large|small|pieces?|pcs|cloves?|pinch(?:es)?)?)\s+(?:of\s+)?(.+)$/i);
-      return { need: match ? match[1].trim() : "As listed in recipe", name: (match ? match[2] : chunk).replace(/[.!]+$/, "").trim() };
-    }).filter(x => x.name);
-    if (!parsed.length) { showNotice("I couldn't read the ingredient list. Paste one ingredient per line."); return; }
-    let matchedCount = 0;
-    let customCountAdded = 0;
-    parsed.forEach(item => {
-      const key = item.name.toLowerCase();
-      const product = products.find(p => !p.paused && (p.name.toLowerCase() === key || p.name.toLowerCase().includes(key) || key.includes(p.name.toLowerCase())));
-      if (product) {
-        matchedCount += 1;
-        setCart(old => ({ ...old, [product.id]: Math.max(1, Number(old[product.id] || 0)) }));
-        setCartRecipeNeeds(old => ({ ...old, [product.id]: item.need }));
-        setCartPurchaseUnits(old => ({ ...old, [product.id]: old[product.id] || product.unit || "1 pack" }));
-      } else {
-        customCountAdded += 1;
-        setCustomItems(old => [...old, { name: item.name, quantity: 1, purchaseUnit: "500 g", recipeNeed: item.need, source: "Hello Kitchen recipe import" }]);
-      }
-    });
-    setRecipeImportText("");
-    showNotice(`${parsed.length} ingredients imported: ${matchedCount} matched to store products and ${customCountAdded} sent as custom requests. Review pack sizes in your cart.`);
   }
 
   function addCustomItem(e) {
@@ -496,7 +465,28 @@ export default function App() {
 .photo-unavailable-label { display:none; min-height:150px; place-items:center; color:#687568; font-size:.85rem; }
 .product-picture.photo-unavailable .photo-unavailable-label { display:grid; }
 .hero-photo { background-size:cover; background-position:center; background-repeat:no-repeat; }
-}`}</style>
+.header-actions button { white-space:nowrap; }
+.recipe-page { max-width:1200px; margin:0 auto; padding:24px; }
+.recipe-tab-panel { margin-top:18px; }
+.dukandar-floating-button { position:fixed; right:22px; bottom:22px; z-index:80; display:flex; align-items:center; gap:10px; border:0; border-radius:999px; padding:12px 18px 12px 12px; background:#244b2c; color:#fff; font-weight:700; box-shadow:0 8px 28px #18351f45; cursor:pointer; }
+.dukandar-floating-button span { width:44px; height:44px; display:grid; place-items:center; border-radius:50%; background:#f5e3c5; overflow:hidden; }
+.dukandar-floating-button span img { width:100%; height:100%; object-fit:cover; object-position:50% 24%; }
+.dukandar-popup-backdrop { position:fixed; inset:0; z-index:100; background:#15201666; display:flex; align-items:flex-end; justify-content:flex-end; padding:22px; }
+.dukandar-popup { width:min(410px,100%); max-height:min(620px,90vh); overflow:hidden; border-radius:20px; background:#fff; box-shadow:0 18px 60px #0004; }
+.dukandar-popup-head { display:flex; align-items:center; gap:12px; padding:15px 17px; background:#244b2c; color:#fff; }
+.dukandar-popup-avatar { width:52px; height:52px; display:grid; place-items:center; border-radius:50%; background:#f5e3c5; overflow:hidden; flex:0 0 auto; }
+.dukandar-popup-avatar img { width:100%; height:100%; object-fit:cover; object-position:50% 22%; }
+.dukandar-popup-head small { display:block; margin-top:3px; color:#e0eddf; }
+.dukandar-popup-head button { margin-left:auto; border:0; background:transparent; color:#fff; font-size:20px; cursor:pointer; }
+.dukandar-popup-body { padding:16px; }
+.dukandar-chat-bubble,.dukandar-chat-reply { padding:12px 14px; border-radius:14px; background:#f1f6ed; color:#344a34; line-height:1.5; margin-bottom:10px; }
+.dukandar-chat-reply { background:#fff7e8; }
+.dukandar-popup-form { display:flex; gap:8px; margin-top:14px; }
+.dukandar-popup-form input { min-width:0; flex:1; padding:12px; border:1px solid #d3ddcf; border-radius:10px; font:inherit; }
+.dukandar-popup-links { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+.dukandar-popup-links button { border:1px solid #d5e1d1; background:#fff; color:#315438; border-radius:9px; padding:9px 11px; cursor:pointer; }
+@media(max-width:650px) { .header-actions { flex-wrap:wrap; } .dukandar-popup-backdrop { padding:0; } .dukandar-popup { width:100%; border-radius:20px 20px 0 0; } .recipe-page { padding:14px; } }
+`}</style>
     <div className="app-shell">
       {!supabaseReady && <div className="top-strip">Setup required: configure Supabase environment variables before accepting live orders.</div>}
       <div className="top-strip">Fresh groceries • Everyday essentials • Delivered with care <span>Welcome to your neighbourhood store</span></div>
@@ -507,6 +497,9 @@ export default function App() {
         <input className="search-box" placeholder="⌕  Search products — can’t find an item? Request it here..." value={search}
           onChange={e => { setSearch(e.target.value); setView("shop"); }} />
         <div className="header-actions">
+          <button type="button" onClick={() => setView("shop")}>Shop</button>
+          <button type="button" onClick={() => setView("recipes")}>📖 Recipe Book</button>
+          <button type="button" onClick={() => setDukandarOpen(true)}>✨ Ask Dukandar</button>
           <button onClick={() => { setView("admin"); setAdmin(false); }}>♙ Admin</button>
           <button className="cart-button" onClick={() => setCheckout(true)}>🛒 Cart <b>{totalCartCount}</b></button>
         </div>
@@ -535,13 +528,6 @@ export default function App() {
             <span>{["🛍️","🍚","🫘","🫒","🌶️","🧂","🍪","🍟","🍫","☕","🥛","🍞","🍎","🥕","🧴","🧼","💇","🪥","🧹","🫧","🧺","🍽️","🪔","👶","💊","🥤","🍜","🥜","🐾","📒"][i]}</span>{c}
           </button>)}</div>
         </section>
-        <section className="dukandar-card" style={{display:"grid",gridTemplateColumns:"76px minmax(0,1fr)",gap:14,alignItems:"center",padding:16,margin:"18px 0",border:"1px solid #d8e6d3",borderRadius:18,background:"linear-gradient(110deg,#f0f8e9,#fff8e9)"}}>
-          <img src="/dukandar-avatar.png" alt="Traditional Tamil grocery shopkeeper" style={{width:76,height:76,objectFit:"cover",objectPosition:"center",borderRadius:"50%",border:"3px solid #b77937",background:"#f4dfbd"}} onError={e=>{e.currentTarget.style.display="none";}} />
-          <div><b style={{fontSize:18}}>Ask Dukandar · வணக்கம்!</b><p style={{margin:"4px 0 10px",color:"#536253"}}>Ask for a grocery item. I’ll check the store list or help you request something not listed.</p>
-            <form onSubmit={askDukandar} style={{display:"flex",gap:8,flexWrap:"wrap"}}><input value={dukandarQuestion} onChange={e=>setDukandarQuestion(e.target.value)} placeholder="e.g. I need Toor Dal..." style={{flex:"1 1 230px",padding:12,border:"1px solid #cbd8ca",borderRadius:10}}/><button className="primary-button">Ask Dukandar</button></form>
-            <small style={{display:"block",marginTop:8,color:"#52644f"}}>{dukandarReply}</small>
-          </div>
-        </section>
         <section className="custom-section" id="custom-request"><div><span className="eyebrow">NEED SOMETHING ELSE?</span><h2>Can’t find an item? Request it here</h2><p>Enter the recipe measurement separately from the pack size you want to buy. The shop will confirm availability.</p></div>
           <form onSubmit={addCustomItem} style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(145px,1fr))",gap:10,width:"100%"}}>
             <input value={customItem} onChange={e => setCustomItem(e.target.value)} placeholder="Enter item name..." required />
@@ -552,27 +538,6 @@ export default function App() {
           </form>
         </section>
 
-        <section className="panel" style={{margin:"18px 0"}}>
-          <div className="section-heading"><div><span className="eyebrow">COOK SOMETHING TODAY</span><h2>Recipe book</h2><p>Choose a recipe to add its ingredients to your cart.</p></div></div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",gap:12}}>
-            {recipeBook.map(recipe=><article key={recipe.id} style={{padding:14,border:"1px solid #e1e8dc",borderRadius:14,background:"#fff"}}>
-              <small style={{color:"#66765e"}}>{recipe.cuisine} · Serves {recipe.servings}</small><h3 style={{margin:"6px 0"}}>{recipe.name}</h3>
-              <p style={{fontSize:13,color:"#5f6b5b"}}>{recipe.ingredients.map(x=>`${x[0]} (${x[1]})`).join(" · ")}</p>
-              <button className="primary-button" type="button" onClick={()=>addRecipeToCart(recipe)}>Add recipe ingredients</button>
-            </article>)}
-          </div>
-          <div style={{marginTop:18,padding:18,border:"1px solid #d8e6d3",borderRadius:16,background:"linear-gradient(110deg,#f0f8e9,#fff8e9)"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:14,flexWrap:"wrap"}}>
-              <div style={{flex:"1 1 260px"}}><span className="eyebrow">MORE RECIPE IDEAS</span><h3 style={{margin:"5px 0"}}>Explore Hello Kitchen</h3><p style={{margin:"0 0 8px",color:"#536253"}}>Find a recipe on Hello Kitchen, copy its ingredient list and paste it below. Ask Dukandar will match items with the Balaji Home Needs catalogue.</p></div>
-              <a className="primary-button" href="https://www.hellokitchen.in/" target="_blank" rel="noopener noreferrer" style={{textDecoration:"none",display:"inline-block"}}>Open Hello Kitchen ↗</a>
-            </div>
-            <form onSubmit={importHelloKitchenIngredients} style={{marginTop:10}}>
-              <label htmlFor="hello-kitchen-ingredients" style={{display:"block",fontWeight:700,marginBottom:7}}>Paste recipe ingredients</label>
-              <textarea id="hello-kitchen-ingredients" value={recipeImportText} onChange={e=>setRecipeImportText(e.target.value)} rows={4} placeholder={"Example:\n2 cups rice\n1 onion\n2 tomatoes\n1 tsp turmeric powder"} style={{display:"block",width:"100%",boxSizing:"border-box",padding:12,border:"1px solid #cbd8ca",borderRadius:10,font:"inherit",resize:"vertical"}} />
-              <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginTop:10}}><button className="primary-button" type="submit">Import ingredients to cart</button><small style={{color:"#657260"}}>Matched products are added to your cart; unavailable items become custom requests.</small></div>
-            </form>
-          </div>
-        </section>
         <section className="products-section" id="products">
           <div className="section-heading"><div><span className="eyebrow">ADD WHAT YOU NEED</span><h2>{category === "All" ? "Browse all products" : category}</h2></div><span>{filteredProducts.length} items</span></div>
           <div className="product-grid">{filteredProducts.map(p => <article className="product-card" key={p.id}>
@@ -582,6 +547,23 @@ export default function App() {
           {!filteredProducts.length && <p className="empty">No products found. Try another search or request it below.</p>}
         </section>
         {customItems.length > 0 && <p className="custom-added">Requested: {customItems.map(item => `${item.name}: buying ${item.quantity} × ${item.purchaseUnit}${item.recipeNeed ? ` (recipe needs ${item.recipeNeed})` : ""}`).join(", ")} <button onClick={() => setCustomItems([])}>Clear</button></p>}
+      </main>}
+
+
+      {view === "recipes" && <main className="recipe-page">
+        <div className="section-heading"><div><span className="eyebrow">COOK SOMETHING TODAY</span><h1>Recipe Book</h1><p>Browse recipes, then add the ingredients to your Balaji Home Needs cart.</p></div><button className="back-button" type="button" onClick={() => setView("shop")}>← Back to Shop</button></div>
+        <section className="panel recipe-tab-panel" style={{margin:"18px 0"}}>
+          <div className="section-heading"><div><span className="eyebrow">COOK SOMETHING TODAY</span><h1>Recipe Book</h1><p>Choose a recipe and add its ingredients to your shopping request.</p></div></div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",gap:12}}>
+            {recipeBook.map(recipe=><article key={recipe.id} style={{padding:14,border:"1px solid #e1e8dc",borderRadius:14,background:"#fff"}}>
+              <small style={{color:"#66765e"}}>{recipe.cuisine} · Serves {recipe.servings}</small><h3 style={{margin:"6px 0"}}>{recipe.name}</h3>
+              <p style={{fontSize:13,color:"#5f6b5b"}}>{recipe.ingredients.map(x=>`${x[0]} (${x[1]})`).join(" · ")}</p>
+              <button className="primary-button" type="button" onClick={()=>addRecipeToCart(recipe)}>Add recipe ingredients</button>
+            </article>)}
+          </div>
+
+        </section>
+
       </main>}
 
       {view === "admin" && <main className="admin-page">
@@ -651,6 +633,18 @@ export default function App() {
       </div></div>}
       {deliveryBlocked && <div className="modal-backdrop" role="dialog" aria-modal="true"><div className="checkout-modal" style={{maxWidth:480,textAlign:"center",padding:28}}><div style={{fontSize:46,marginBottom:10}}>💚</div><span className="eyebrow">BALAJI HOME NEEDS</span><h2>We're working hard to reach you!</h2><p>Thank you for choosing Balaji Home Needs. We currently deliver within 3 km of our store. Your location is approximately <b>{deliveryDistanceKm?.toFixed(2)} km</b> away, so delivery is not available there just yet.</p><p>We're working hard to expand our delivery service and hope to serve you soon!</p><button type="button" className="primary-button" style={{width:"100%"}} onClick={()=>{setDeliveryBlocked(false);setCheckout(false);}}>Okay, thank you</button></div></div>}
       {submittedOrderId && <div className="modal-backdrop" role="dialog" aria-modal="true"><div className="checkout-modal" style={{maxWidth:480,textAlign:"center"}}><div className="login-icon">✓</div><span className="eyebrow">REQUEST RECEIVED</span><h2>Thank you!</h2><p>Your order request has been submitted successfully. The store will check availability and send your estimate on WhatsApp.</p><div style={{padding:18,background:"#f4f7f1",borderRadius:12,margin:"18px 0"}}><small>YOUR ORDER ID</small><h2 style={{letterSpacing:2}}>{submittedOrderId}</h2><button type="button" className="back-button" onClick={() => { navigator.clipboard?.writeText(submittedOrderId); showNotice("Order ID copied."); }}>Copy Order ID</button></div><p><b>Please save your Order ID for future reference.</b></p><button className="primary-button" type="button" onClick={() => setSubmittedOrderId("")}>Close</button></div></div>}
+
+      {dukandarOpen && <div className="dukandar-popup-backdrop" onClick={() => setDukandarOpen(false)}>
+        <section className="dukandar-popup" role="dialog" aria-modal="true" aria-label="Ask Dukandar assistant" onClick={e => e.stopPropagation()}>
+          <div className="dukandar-popup-head"><div className="dukandar-popup-avatar"><img src="/dukandar-mascot.png" alt="Dukandar assistant" /></div><div><b>Ask Dukandar</b><small>Your Balaji Home Needs assistant</small></div><button type="button" aria-label="Close Ask Dukandar" onClick={() => setDukandarOpen(false)}>✕</button></div>
+          <div className="dukandar-popup-body"><div className="dukandar-chat-bubble">Vanakkam! 🙏 What groceries do you need? I can check the store catalogue or help you request an item that is not listed.</div>
+            {dukandarReply && <div className="dukandar-chat-reply">{dukandarReply}</div>}
+            <form onSubmit={askDukandar} className="dukandar-popup-form"><input autoFocus value={dukandarQuestion} onChange={e=>setDukandarQuestion(e.target.value)} placeholder="Ask for an item, e.g. Toor Dal..."/><button className="primary-button" type="submit">Send</button></form>
+            <div className="dukandar-popup-links"><button type="button" onClick={()=>{setDukandarOpen(false);setView("recipes");}}>📖 Open Recipe Book</button><button type="button" onClick={()=>{setDukandarOpen(false);setView("shop");}}>🛒 Browse groceries</button></div>
+          </div>
+        </section>
+      </div>}
+      {!dukandarOpen && <button type="button" className="dukandar-floating-button" onClick={()=>setDukandarOpen(true)}><span><img src="/dukandar-mascot.png" alt="" /></span> Ask Dukandar</button>}
       <footer><b>BALAJI HOME NEEDS</b><p>Everyday essentials, delivered with care.</p><small>© {new Date().getFullYear()} Balaji Home Needs. All rights reserved.</small></footer>
       {count + customCount > 0 && view === "shop" && <button className="floating-cart" onClick={()=>setCheckout(true)}>🛒 View Cart · {totalCartCount} items</button>}
       {notice && <div className="toast">{notice}</div>}
