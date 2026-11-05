@@ -115,12 +115,16 @@ const productPhotoTags = {
   "Notebook": "paper notebook stationery"
 };
 const productPhotoUrl = product => {
-  if (product.imageUrl) return product.imageUrl;
+  // The original 83 catalogue products use the local images in /public/products.
+  // Prefer these stable local paths over older URLs saved in localStorage or Supabase.
   const productId = Number(product.id);
+
   if (Number.isInteger(productId) && productId >= 1 && productId <= 83) {
     return `/products/${String(productId).padStart(3, "0")}.webp`;
   }
-  return "";
+
+  // Newly added products can continue using their own image URL.
+  return typeof product.imageUrl === "string" ? product.imageUrl.trim() : "";
 };
 const heroPhotoUrl = "/kirana-hero.png";
 const statuses = ["Order Received", "Estimate Sent", "Customer Confirmed", "Preparing", "Out for Delivery", "Delivered", "Cancelled"];
