@@ -261,7 +261,13 @@ export default function App() {
   const [recipeSearch, setRecipeSearch] = useState("");
   const [recipeCategory, setRecipeCategory] = useState("All");
   const [activeRecipe, setActiveRecipe] = useState(null);
+  const [recipeServings, setRecipeServings] = useState(4);
+  const [welcomeOpen, setWelcomeOpen] = useState(() => !sessionStorage.getItem("balaji_welcome_seen"));
+  const [dukandarOpen, setDukandarOpen] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const [assistantInput, setAssistantInput] = useState("");
+  const [recipeImportText, setRecipeImportText] = useState("");
+  const [pendingAssistantItems, setPendingAssistantItems] = useState([]);
   const [assistantMessages, setAssistantMessages] = useState([
     { role: "assistant", text: "Namaste! I'm Ask Dukandar. Tell me what you want to cook or which grocery item you need. I can help you explore recipes and add matching store items to your cart." }
   ]);
@@ -360,6 +366,247 @@ export default function App() {
     e.preventDefault();
     if (customItem.trim()) { setCustomItems(old => [...old, { name: customItem.trim(), quantity: Math.max(1, Number(customQty) || 1) }]); setCustomItem(""); setCustomQty("1"); showNotice("Item added to cart."); }
   }
+  // Recipe ingredients are added as clearly labelled grocery requests so their
+  // cooking units (cups, pieces, grams, etc.) are not incorrectly converted to packs.
+  const ingredientAliases = {
+    "rice": "Sona Masoori Rice",
+    "poha": "Poha",
+    "besan": "Besan",
+    "tamarind": "Tamarind",
+    "carrot": "Carrot",
+    "tomato": "Tomatoes",
+    "onion": "Onion",
+    "peanuts": "Peanuts"
+  };
+  function canonicalIngredient(name) {
+    const key = String(name || "").toLowerCase().trim();
+    const alias = ingredientAliases[key];
+    if (alias) return alias;
+    const exact = products.find(p => p.name.toLowerCase() === key);
+    if (exact) return exact.name;
+    const partial = products.find(p => {
+      const productName = p.name.toLowerCase();
+      return productName.includes(key) || key.includes(productName);
+    });
+    return partial?.name || name;
+  }
+  function addRecipeToCart(recipe, requestedServings = recipeServings) {
+    if (!recipe?.ingredients?.length) {
+      showNotice("Recipe ingredients are not available yet.");
+      return;
+    }
+    const multiplier = Math.max(1, Number(requestedServings) || recipe.servings) / recipe.servings;
+    const additions = recipe.ingredients.map(ingredient => {
+      const productName = canonicalIngredient(ingredient.name);
+      const amount = Number(ingredient.quantity) * multiplier;
+      const rounded = Number.isInteger(amount) ? amount : Number(amount.toFixed(2));
+      return {
+        name: productName,
+        quantity: rounded,
+        unit: ingredient.unit || "",
+        recipe: recipe.title
+      };
+    });
+    setCustomItems(old => {
+      const next = [...old];
+      additions.forEach(item => {
+        const existing = next.findIndex(x =>
+          String(x.name).toLowerCase() === item.name.toLowerCase() &&
+          String(x.unit || "").toLowerCase() === item.unit.toLowerCase()
+        );
+        if (existing >= 0) {
+          next[existing] = { ...next[existing], quantity: Number(next[existing].quantity || 0) + item.quantity };
+        } else {
+          next.push(item);
+        }
+      });
+      return next;
+    });
+    showNotice(`${additions.length} recipe ingredients added to your cart for ${requestedServings} people.`);
+    setActiveRecipe(null);
+  }
+  function addPackageToCart(pack) {
+    const selected = recipeBook.filter(recipe => pack.recipeIds.includes(recipe.id));
+    if (!selected.length) {
+      showNotice("Package ingredients are not available.");
+      return;
+    }
+    selected.forEach(recipe => addRecipeToCart(recipe, recipe.servings));
+    showNotice(`${pack.title} ingredients added to your cart.`);
+  }
+  function editDistance(a, b) {
+    const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      let prev = row[0];
+      row[0] = i;
+      for (let j = 1; j <= b.length; j++) {
+        const temp = row[j];
+        row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+        prev = temp;
+      }
+    }
+    return row[b.length];
+  }
+  function findClosestProduct(rawName) {
+    const cleaned = rawName.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+    let best = null;
+    let bestScore = 0;
+    products.forEach(product => {
+      const candidate = product.name.toLowerCase();
+      const distance = editDistance(cleaned, candidate);
+      const score = 1 - distance / Math.max(cleaned.length, candidate.length, 1);
+      if (score > bestScore) { bestScore = score; best = product; }
+      // Also compare individual words so “sunflwer oil” can match “Sunflower Oil”.
+      candidate.split(" ").forEach(word => {
+        const wordScore = 1 - editDistance(cleaned, word) / Math.max(cleaned.length, word.length, 1);
+        if (wordScore > bestScore) { bestScore = wordScore; best = product; }
+      });
+    });
+    return bestScore >= 0.62 ? best : null;
+  }
+  function parseAssistantOrder(text) {
+    const chunks = text
+      .replace(/\b(add|please add|put|buy|order|i need|i want|can you get|give me)\b/gi, " ")
+      .split(/,|\n|\band\b|\bplus\b|[•;]/gi)
+      .map(x => x.replace(/[.!?]/g, "").trim())
+      .filter(Boolean);
+    const found = [];
+    const unitRegex = /(kg|kgs|kilograms?|g|grams?|litres?|liters?|l|ml|packets?|packs?|pieces?|pcs|dozen|boxes?|bottles?|bunch(?:es)?|cups?|tablespoons?|tbsp|teaspoons?|tsp|cloves?|pinches?|medium|large|small|slices?|sprigs?|sticks?|leaves?)\b/i;
+    chunks.forEach(chunk => {
+      const firstQty = chunk.match(/^(\d+(?:\.\d+)?)\s*(kg|kgs|kilograms?|g|grams?|litres?|liters?|l|ml|packets?|packs?|pieces?|pcs|dozen|boxes?|bottles?|bunch(?:es)?|cups?|tablespoons?|tbsp|teaspoons?|tsp|cloves?|pinches?|medium|large|small|slices?|sprigs?|sticks?|leaves?)?\s*(?:of\s+)?(.+)$/i);
+      const lastQty = chunk.match(/^(.+?)\s+(\d+(?:\.\d+)?)\s*(kg|kgs|kilograms?|g|grams?|litres?|liters?|l|ml|packets?|packs?|pieces?|pcs|dozen|boxes?|bottles?|bunch(?:es)?|cups?|tablespoons?|tbsp|teaspoons?|tsp|cloves?|pinches?|medium|large|small|slices?|sprigs?|sticks?|leaves?)$/i);
+      let quantity = 1, unit = "item", rawName = chunk;
+      if (firstQty) {
+        quantity = Number(firstQty[1]);
+        unit = (firstQty[2] || "item").toLowerCase();
+        rawName = firstQty[3];
+      } else if (lastQty) {
+        rawName = lastQty[1];
+        quantity = Number(lastQty[2]);
+        unit = lastQty[3].toLowerCase();
+      } else {
+        const match = chunk.match(unitRegex);
+        if (match) {
+          unit = match[0].toLowerCase();
+          rawName = chunk.replace(match[0], "").trim();
+        }
+      }
+      rawName = rawName.replace(/^(some|the|a|an)\s+/i, "").trim();
+      if (!rawName) return;
+      const matched = findClosestProduct(rawName);
+      found.push({
+        name: matched ? matched.name : rawName.replace(/\b\w/g, c => c.toUpperCase()),
+        quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+        unit,
+        productId: matched?.id || null,
+        isCustomRequest: !matched
+      });
+    });
+    return { found };
+  }
+  function importRecipeIngredients() {
+    const pasted = recipeImportText.trim();
+    if (!pasted) { showNotice("Paste the recipe ingredient list first."); return; }
+    const parsed = parseAssistantOrder(pasted);
+    if (!parsed.found.length) {
+      showNotice("I could not identify ingredients. Try: 2 cups rice, 1 onion, 2 tomatoes.");
+      return;
+    }
+    const recipeItems = parsed.found.map(item => ({
+      ...item,
+      source: "Hello Kitchen recipe import",
+      recipeRequirement: `${item.quantity} ${item.unit}`,
+      status: item.isCustomRequest ? "Admin review required" : "Requested",
+      requestNote: "Recipe measurement; store to confirm suitable retail pack size."
+    }));
+    addAssistantItemsDirectly(recipeItems);
+    setAssistantMessages(old => [...old,
+      { role: "user", text: "I pasted ingredients from a recipe." },
+      { role: "assistant", text: `I found ${recipeItems.length} ingredient requests and added them to your cart. These are recipe measurements, not guaranteed retail pack sizes. Balaji Home Needs will confirm the suitable pack or quantity. Missing catalogue items are marked for store review.` }
+    ]);
+    setRecipeImportText("");
+  }
+  function addAssistantItemsDirectly(items) {
+    if (!items?.length) return;
+    setCustomItems(old => {
+      const next = [...old];
+      items.forEach(item => {
+        const idx = next.findIndex(x =>
+          x.name.toLowerCase() === item.name.toLowerCase() &&
+          String(x.unit || "").toLowerCase() === item.unit.toLowerCase()
+        );
+        if (idx >= 0) next[idx] = { ...next[idx], quantity: Number(next[idx].quantity || 0) + item.quantity };
+        else next.push({ ...item, source: "Ask Dukandar", status: item.isCustomRequest ? "Admin review required" : "Requested" });
+      });
+      return next;
+    });
+    showNotice(`${items.length} item${items.length === 1 ? "" : "s"} added to your cart.`);
+  }
+  function confirmAssistantOrder() {
+    if (!pendingAssistantItems.length) return;
+    setCustomItems(old => {
+      const next = [...old];
+      pendingAssistantItems.forEach(item => {
+        const idx = next.findIndex(x => x.name.toLowerCase() === item.name.toLowerCase() && String(x.unit || "").toLowerCase() === item.unit.toLowerCase());
+        if (idx >= 0) next[idx] = { ...next[idx], quantity: Number(next[idx].quantity || 0) + item.quantity };
+        else next.push({ ...item, source: "Ask Dukandar" });
+      });
+      return next;
+    });
+    setAssistantMessages(old => [...old, { role: "assistant", text: `Done! Added ${pendingAssistantItems.map(x => `${x.quantity} ${x.unit} ${x.name}`).join(", ")} to your cart. You can review the quantities before checkout.` }]);
+    setPendingAssistantItems([]);
+    showNotice("Ask Dukandar added your requested items to the cart.");
+  }
+  function sendAssistantMessage(e) {
+    e.preventDefault();
+    const question = assistantInput.trim();
+    if (!question) return;
+    const q = question.toLowerCase();
+    let answer = "I can help with recipes and shopping. You can type an item even if it is not in our catalogue. For example: “2 kg toor dal, 1 litre oil”.";
+    const isOrderIntent = /\b(add|buy|order|need|want|get|put|cart)\b/i.test(q) || /\d+\s*(kg|g|l|ml|pack|packet|piece|pcs|bottle|box)\b/i.test(q);
+    if (isOrderIntent) {
+      const parsed = parseAssistantOrder(question);
+      if (parsed.found.length) {
+        addAssistantItemsDirectly(parsed.found);
+        answer = `Added to your cart: ${parsed.found.map(x => `${x.quantity} ${x.unit} ${x.name}${x.isCustomRequest ? " (custom request; store will confirm availability)" : ""}`).join(", ")}. You can review or edit the items in your cart before checkout.`;
+      }
+    } else {
+      const matchedRecipe = recipeBook.find(recipe =>
+        q.includes(recipe.title.toLowerCase()) ||
+        recipe.title.toLowerCase().split(" ").some(word => word.length > 3 && q.includes(word))
+      );
+      if (matchedRecipe) {
+        answer = `${matchedRecipe.title} serves ${matchedRecipe.servings} people and takes ${matchedRecipe.time}. It needs ${matchedRecipe.ingredients.map(x => x.name).join(", ")}. Open Recipe Book and tap TRY ME to see the full method and add ingredients to your request cart.`;
+      } else if (q.includes("breakfast") || q.includes("morning")) {
+        answer = "For breakfast, try Soft Idli, Crispy Dosa or Quick Vegetable Poha. Open Recipe Book and tap TRY ME to view ingredients and serving sizes.";
+      } else if (q.includes("snack") || q.includes("tea time")) {
+        answer = "Onion Pakoda is a lovely tea-time option. You can find it in Recipe Book under Snacks.";
+      } else if (q.includes("sweet") || q.includes("dessert")) {
+        answer = "Try our Rice Payasam. It is a traditional sweet made with rice, milk, sugar, cashews, raisins and ghee.";
+      } else if (q.includes("biryani")) {
+        answer = "For Vegetable Biryani, open the Recipe Book and tap TRY ME. You can adjust the serving size and add its ingredients to your cart.";
+      }
+    }
+    setAssistantMessages(old => [...old, { role: "user", text: question }, { role: "assistant", text: answer }]);
+    setAssistantInput("");
+  }
+  function speakDukandarGreeting() {
+    if (!soundEnabled) return;
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      const greeting = new SpeechSynthesisUtterance("Namaste! Welcome to Balaji Home Needs. I am Ask Dukandar. How can I help you today?");
+      greeting.lang = "en-IN";
+      greeting.rate = 0.92;
+      window.speechSynthesis.speak(greeting);
+    }
+  }
+  function closeWelcome() {
+    sessionStorage.setItem("balaji_welcome_seen", "1");
+    setWelcomeOpen(false);
+    setDukandarOpen(true);
+    speakDukandarGreeting();
+  }
+
   function submitOrder(e) {
     e.preventDefault();
     if (!customer.name.trim() || !/^[6-9]\d{9}$/.test(customer.phone) || !customer.address.trim()) {
@@ -487,6 +734,41 @@ export default function App() {
 .assistant-page{max-width:900px}.assistant-hero{text-align:center;padding:34px 20px 26px;background:radial-gradient(ellipse at 50% 20%,#e9f5e6,transparent 65%)}.assistant-orb{width:112px;height:112px;border-radius:36px;background:linear-gradient(145deg,#1c593a,#80b66d);margin:0 auto 20px;display:grid;place-items:center;position:relative;box-shadow:0 16px 36px #1c593a35;animation:assistantBob 3.2s ease-in-out infinite}.assistant-orb span{font-size:58px}.assistant-orb i,.assistant-orb b{position:absolute;color:#fff;font-style:normal}.assistant-orb i{right:-8px;top:4px;font-size:26px}.assistant-orb b{left:-10px;bottom:2px;font-size:20px}@keyframes assistantBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
 .assistant-hero h1{font-size:clamp(2.4rem,5vw,3.7rem);color:#1c5638;margin:8px 0}.assistant-hero p{max-width:640px;margin:0 auto;color:#667363;line-height:1.65}.assistant-capabilities{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin:20px 0}.assistant-capabilities span{padding:8px 12px;border-radius:99px;background:#f0f5ec;color:#36583d;font-size:.85rem}
 .assistant-chat{border:1px solid #e1e9dd;border-radius:22px;overflow:hidden;background:#fff;box-shadow:0 14px 40px #1b3d2510}.assistant-chat-head{display:flex;align-items:center;gap:12px;padding:16px 20px;background:#174b32;color:#fff}.assistant-avatar{width:42px;height:42px;border-radius:14px;background:#ffffff20;display:grid;place-items:center;font-size:25px}.assistant-chat-head small{display:block;color:#cfe1d0;font-size:.78rem;margin-top:3px}.assistant-chat-head small i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#8ce0a0;margin-right:6px}.assistant-messages{padding:22px;min-height:260px;max-height:420px;overflow:auto;background:linear-gradient(#fbfdf9,#fff)}.assistant-message{display:flex;align-items:flex-start;gap:9px;margin:0 0 16px;max-width:86%}.assistant-message>span{font-size:22px}.assistant-message p{margin:0;padding:12px 15px;border-radius:4px 16px 16px;background:#eff5eb;color:#344b36;line-height:1.55}.assistant-message.user{margin-left:auto;justify-content:flex-end}.assistant-message.user p{background:#1e5a3a;color:#fff;border-radius:16px 4px 16px 16px}.assistant-suggestions{display:flex;gap:8px;flex-wrap:wrap;padding:0 18px 16px}.assistant-suggestions button{border:1px solid #d9e5d4;background:#fff;border-radius:99px;padding:8px 12px;color:#416144;cursor:pointer;font-size:.8rem}.assistant-input-row{display:flex;gap:10px;padding:16px;border-top:1px solid #edf0eb}.assistant-input-row input{flex:1;min-width:0}.assistant-note{text-align:center;color:#899286;font-size:.76rem;padding:0 20px 16px}
+
+.recipe-hero{position:relative;overflow:hidden;border-radius:24px;background:linear-gradient(115deg,#173f2a,#2f7045 58%,#e9b94f);color:#fff;box-shadow:0 18px 45px #1c56382b}
+.recipe-hero:after{content:"✦  ✧  ✦";position:absolute;right:28%;top:16px;color:#ffe59a;font-size:28px;letter-spacing:18px;animation:recipeSparkle 3s ease-in-out infinite}
+.recipe-hero h1{letter-spacing:-1.5px;text-shadow:0 4px 18px #061b1080}
+.recipe-card{position:relative;animation:recipeRise .55s both}
+.recipe-card:before{content:"";position:absolute;inset:0;border-radius:20px;pointer-events:none;border:1px solid #e9c96d00;transition:border-color .25s,box-shadow .25s}
+.recipe-card:hover:before{border-color:#e9c96d;box-shadow:inset 0 0 0 2px #f4d77c66}
+.recipe-card-art:after{content:"✧";position:absolute;right:18px;top:16px;color:#d7a83c;font-size:25px;animation:recipeSparkle 2s infinite}
+.recipe-card:nth-child(3n+1){animation-delay:.05s}.recipe-card:nth-child(3n+2){animation-delay:.12s}.recipe-card:nth-child(3n){animation-delay:.19s}
+.recipe-card:hover .try-button,.recipe-pack-card:hover .primary-button{box-shadow:0 0 0 3px #f2d37a66,0 8px 24px #174b3233}
+.try-button{background:linear-gradient(100deg,#174b32,#2f8050);box-shadow:0 5px 14px #174b3222}
+@keyframes recipeSparkle{0%,100%{opacity:.45;transform:scale(.9) rotate(0)}50%{opacity:1;transform:scale(1.16) rotate(12deg)}}
+@keyframes recipeRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+.serving-control{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;margin-bottom:12px;border:1px solid #e4ecdF;border-radius:14px;background:#f7fbf3}
+.serving-control button{width:34px;height:34px;border:0;border-radius:50%;background:#1c5638;color:#fff;font-size:20px;cursor:pointer}
+.serving-control b{color:#1c5638;white-space:nowrap}
+.dukandar-fab{position:fixed;right:22px;bottom:22px;z-index:1100;border:0;border-radius:999px;padding:8px 16px 8px 8px;display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,#174b32,#2c8050);color:#fff;font-weight:800;box-shadow:0 10px 30px #123b2a55;cursor:pointer;animation:assistantBob 3s infinite}
+.dukandar-face{width:48px;height:48px;display:grid;place-items:center;border-radius:50%;background:linear-gradient(145deg,#ffe2b4,#fff8e9);border:3px solid #f3cf71;font-size:30px}
+.dukandar-panel{position:fixed;right:22px;bottom:92px;width:min(360px,calc(100vw - 28px));z-index:1101;border:1px solid #dce9d8;border-radius:22px;background:#fff;box-shadow:0 20px 60px #102c1e40;overflow:hidden;animation:modalUp .22s ease}
+.dukandar-panel-head{display:flex;align-items:center;gap:10px;padding:14px 16px;background:linear-gradient(110deg,#174b32,#2f8050);color:#fff}
+.dukandar-panel-head .dukandar-face{width:42px;height:42px;font-size:26px}
+.dukandar-panel-head button{margin-left:auto;background:#ffffff20;color:#fff;border:0;border-radius:9px;padding:7px 10px;cursor:pointer}
+.dukandar-panel-body{padding:16px}.dukandar-panel-body p{line-height:1.55;color:#526052}
+.dukandar-panel-actions{display:flex;gap:8px;flex-wrap:wrap}.dukandar-panel-actions button{border:1px solid #dce8d7;border-radius:99px;background:#f7fbf4;padding:9px 12px;color:#31583b;cursor:pointer}
+.welcome-backdrop{position:fixed;inset:0;z-index:1400;background:#102317a8;display:grid;place-items:center;padding:18px;animation:fadeIn .25s}
+.welcome-card{width:min(440px,100%);padding:28px;border-radius:26px;background:linear-gradient(145deg,#fff,#f2f8ed);text-align:center;box-shadow:0 24px 80px #0005;animation:modalUp .3s}
+.welcome-shopkeeper{width:100px;height:100px;margin:0 auto 14px;border-radius:30px;display:grid;place-items:center;background:linear-gradient(145deg,#ffe5b9,#fff7e9);border:3px solid #f2d17a;font-size:64px;box-shadow:0 10px 24px #b98c3733}
+.welcome-card h2{color:#174b32;margin:8px 0}.welcome-card p{color:#657264;line-height:1.6}
+.sound-toggle{display:inline-flex;align-items:center;gap:7px;border:1px solid #dce8d7;border-radius:99px;background:#fff;padding:8px 12px;margin:0 0 14px;color:#31583b;cursor:pointer}
+
+
+.assistant-order-confirm{margin:12px 0;padding:14px;border:1px solid #b9d8b4;border-radius:14px;background:#f4fbf1;color:#254b2e}
+.assistant-order-confirm>div{padding:6px 0;border-bottom:1px solid #e1eddd}
+.assistant-order-confirm button{margin:10px 8px 0 0}
+
 @media(max-width:900px){.recipe-pack-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.recipe-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.recipe-hero{padding:32px}.recipe-hero-art{width:200px}.recipe-hero-art span{font-size:115px}}
 @media(max-width:600px){.recipe-page,.assistant-page{padding:18px 14px 50px}.recipe-hero{padding:28px 22px;min-height:0}.recipe-hero-art{display:none}.recipe-feature-strip{grid-template-columns:1fr;gap:8px;margin-bottom:28px}.recipe-pack-grid{grid-template-columns:1fr 1fr;gap:9px}.recipe-pack-card{padding:12px}.recipe-pack-card .primary-button{font-size:.7rem}.recipe-grid{grid-template-columns:1fr 1fr;gap:10px}.recipe-card-art{height:115px}.recipe-card-art span{font-size:60px}.recipe-card-body{padding:11px}.recipe-card h3{font-size:.96rem}.recipe-card p{font-size:.78rem;min-height:62px}.recipe-meta{font-size:.67rem}.recipe-tools{flex-direction:column}.recipe-detail-content{grid-template-columns:1fr;padding:20px}.recipe-detail-banner{padding:24px 18px;gap:12px}.recipe-detail-banner>span{font-size:58px}.recipe-detail-banner h2{font-size:1.45rem}.assistant-input-row{padding:10px}.assistant-suggestions{padding:0 10px 12px}.assistant-message{max-width:96%}}
 
@@ -542,7 +824,7 @@ export default function App() {
         <section className="custom-section"><div><span className="eyebrow">CAN'T FIND WHAT YOU NEED?</span><h2>Request any other item</h2><p>Type a product that is not listed. We will check availability and include it in your estimate.</p></div>
           <form onSubmit={addCustomItem}><input value={customItem} onChange={e => setCustomItem(e.target.value)} placeholder="Enter item name..." required /><input aria-label="Quantity" type="number" min="1" step="1" value={customQty} onChange={e => setCustomQty(e.target.value)} style={{maxWidth:110}} /><button className="primary-button">Add to cart</button></form>
         </section>
-        {customItems.length > 0 && <p className="custom-added">Requested: {customItems.map(item => `${item.name} × ${item.quantity}`).join(", ")} <button onClick={() => setCustomItems([])}>Clear</button></p>}
+        {customItems.length > 0 && <p className="custom-added">Requested: {customItems.map(item => `${item.name} × ${item.quantity} ${item.unit || ""}`).join(", ")} <button onClick={() => setCustomItems([])}>Clear</button></p>}
       </main>}
 
 
@@ -552,18 +834,19 @@ export default function App() {
           <div className="recipe-hero-art" aria-hidden="true"><span>🍲</span><i>🥕</i><b>🥬</b><em>🌶️</em></div>
         </section>
         <section className="recipe-feature-strip"><div>🍽️ <b>Everyday recipes</b><small>Breakfast to dinner</small></div><div>⏱️ <b>Cooking time</b><small>Quick ideas and family meals</small></div><div>🛒 <b>Shop ingredients</b><small>Send the list to your cart</small></div></section>
+        <section className="recipe-pack-section"><div className="recipe-pack-card" style={{display:"grid",gridTemplateColumns:"1fr auto",alignItems:"center",gap:16}}><div><span className="eyebrow">FREE RECIPE DISCOVERY</span><h3>Looking for a recipe we don't have?</h3><p>Explore more Indian recipes on Hello Kitchen. Copy the ingredient list and paste it into Ask Dukandar to build your grocery request.</p></div><a className="primary-button" href="https://www.hellokitchen.in/" target="_blank" rel="noopener noreferrer">Explore Hello Kitchen ↗</a></div></section>
         <section className="recipe-pack-section"><div className="section-heading"><div><span className="eyebrow">CURATED FOR YOUR KITCHEN</span><h2>Recommended food packages</h2></div></div><div className="recipe-pack-grid">{recipePackages.map(pack => <article className="recipe-pack-card" key={pack.id}><div className="recipe-pack-emoji">{pack.emoji}</div><h3>{pack.title}</h3><p>{pack.description}</p><button className="primary-button" onClick={() => addPackageToCart(pack)}>＋ Add package ingredients</button></article>)}</div></section>
         <section id="recipe-library" className="recipe-library"><div className="section-heading"><div><span className="eyebrow">FIND YOUR NEXT FAVOURITE</span><h2>Explore the recipe collection</h2></div><span>{recipeBook.length} recipes</span></div>
           <div className="recipe-tools"><input value={recipeSearch} onChange={e=>setRecipeSearch(e.target.value)} placeholder="Search dishes or ingredients..." /><select value={recipeCategory} onChange={e=>setRecipeCategory(e.target.value)}><option>All</option>{["Breakfast","Lunch & Dinner","Snacks","Sweets"].map(c=><option key={c}>{c}</option>)}</select></div>
-          <div className="recipe-grid">{recipeBook.filter(r=>(recipeCategory==="All"||r.category===recipeCategory)&&(`${r.title} ${r.ingredients.map(i=>i.name).join(" ")}`).toLowerCase().includes(recipeSearch.toLowerCase())).map(recipe=><article className="recipe-card" key={recipe.id}><div className="recipe-card-art"><span>{recipe.emoji}</span><small>{recipe.category}</small></div><div className="recipe-card-body"><div className="recipe-meta"><span>⏱ {recipe.time}</span><span>{recipe.difficulty}</span></div><h3>{recipe.title}</h3><p>{recipe.description}</p><button className="try-button" onClick={()=>setActiveRecipe(recipe)}>TRY ME <span>→</span></button></div></article>)}</div>
+          <div className="recipe-grid">{recipeBook.filter(r=>(recipeCategory==="All"||r.category===recipeCategory)&&(`${r.title} ${r.ingredients.map(i=>i.name).join(" ")}`).toLowerCase().includes(recipeSearch.toLowerCase())).map(recipe=><article className="recipe-card" key={recipe.id}><div className="recipe-card-art"><span>{recipe.emoji}</span><small>{recipe.category}</small></div><div className="recipe-card-body"><div className="recipe-meta"><span>⏱ {recipe.time}</span><span>{recipe.difficulty}</span></div><h3>{recipe.title}</h3><p>{recipe.description}</p><button className="try-button" onClick={()=>{setActiveRecipe(recipe);setRecipeServings(recipe.servings);}}>TRY ME <span>→</span></button></div></article>)}</div>
           {!recipeBook.filter(r=>(recipeCategory==="All"||r.category===recipeCategory)&&(`${r.title} ${r.ingredients.map(i=>i.name).join(" ")}`).toLowerCase().includes(recipeSearch.toLowerCase())).length&&<p className="empty">No recipes match that search. Try another dish or ingredient.</p>}
         </section>
-        {activeRecipe && <div className="recipe-modal-backdrop" role="dialog" aria-modal="true" onClick={()=>setActiveRecipe(null)}><article className="recipe-detail-modal" onClick={e=>e.stopPropagation()}><button className="modal-close" onClick={()=>setActiveRecipe(null)}>✕</button><div className="recipe-detail-banner"><span>{activeRecipe.emoji}</span><div><small>{activeRecipe.category} · {activeRecipe.time}</small><h2>{activeRecipe.title}</h2><p>{activeRecipe.description}</p></div></div><div className="recipe-detail-content"><div><h3>Ingredients · Serves {activeRecipe.servings}</h3>{activeRecipe.ingredients.map(item=><div className="recipe-ingredient" key={item.name}><span>{item.name}</span><b>{item.quantity} {item.unit}</b></div>)}<button className="primary-button recipe-add-all" onClick={()=>addRecipeToCart(activeRecipe)}>＋ Add all ingredients to cart</button></div><div><h3>Let's cook</h3><ol className="recipe-steps">{activeRecipe.steps.map((step,i)=><li key={i}><b>Step {i+1}</b><span>{step}</span></li>)}</ol><button className="back-button" onClick={()=>{setActiveRecipe(null);setView("assistant");setAssistantInput(`Help me cook ${activeRecipe.title}`);}}>Ask Dukandar about this recipe ↗</button></div></div></article></div>}
+        {activeRecipe && <div className="recipe-modal-backdrop" role="dialog" aria-modal="true" onClick={()=>setActiveRecipe(null)}><article className="recipe-detail-modal" onClick={e=>e.stopPropagation()}><button className="modal-close" onClick={()=>setActiveRecipe(null)}>✕</button><div className="recipe-detail-banner"><span>{activeRecipe.emoji}</span><div><small>{activeRecipe.category} · {activeRecipe.time}</small><h2>{activeRecipe.title}</h2><p>{activeRecipe.description}</p></div></div><div className="recipe-detail-content"><div><h3>Ingredients</h3><div className="serving-control"><span>👨‍👩‍👧‍👦 Serving size</span><button type="button" onClick={()=>setRecipeServings(v=>Math.max(1,v-1))}>−</button><b>{recipeServings} people</b><button type="button" onClick={()=>setRecipeServings(v=>Math.min(20,v+1))}>＋</button></div>{activeRecipe.ingredients.map(item=><div className="recipe-ingredient" key={item.name}><span>{item.name}</span><b>{Number((item.quantity*recipeServings/activeRecipe.servings).toFixed(2))} {item.unit}</b></div>)}<button className="primary-button recipe-add-all" onClick={()=>addRecipeToCart(activeRecipe,recipeServings)}>＋ Add all ingredients to cart</button></div><div><h3>Let's cook</h3><ol className="recipe-steps">{activeRecipe.steps.map((step,i)=><li key={i}><b>Step {i+1}</b><span>{step}</span></li>)}</ol><button className="back-button" onClick={()=>{setActiveRecipe(null);setView("assistant");setAssistantInput(`Help me cook ${activeRecipe.title}`);}}>Ask Dukandar about this recipe ↗</button></div></div></article></div>}
       </main>}
 
       {view === "assistant" && <main className="assistant-page">
         <section className="assistant-hero"><div className="assistant-orb"><span>🧑‍🍳</span><i>✦</i><b>✧</b></div><span className="eyebrow">YOUR FRIENDLY KITCHEN & GROCERY GUIDE</span><h1>Ask Dukandar</h1><p>Tell me what you want to cook, what you need from the store, or which recipe you would like to try.</p><div className="assistant-capabilities"><span>🍲 Recipe ideas</span><span>🛍️ Product finder</span><span>🥕 Ingredient help</span></div></section>
-        <section className="assistant-chat"><div className="assistant-chat-head"><div className="assistant-avatar">🧑‍🍳</div><div><b>Ask Dukandar</b><small><i></i> Ready to help</small></div></div><div className="assistant-messages">{assistantMessages.map((message,index)=><div key={index} className={`assistant-message ${message.role}`}>{message.role==="assistant"&&<span>🧑‍🍳</span>}<p>{message.text}</p></div>)}</div><div className="assistant-suggestions">{["Suggest breakfast recipes","What do I need for biryani?","Find rice in the store","Show me quick snacks"].map(q=><button key={q} onClick={()=>setAssistantInput(q)}>{q}</button>)}</div><form className="assistant-input-row" onSubmit={sendAssistantMessage}><input value={assistantInput} onChange={e=>setAssistantInput(e.target.value)} placeholder="Ask Dukandar anything..." /><button className="primary-button" type="submit">Send ↑</button></form><p className="assistant-note">Ask Dukandar currently uses the store catalogue and curated recipe knowledge. Live AI-generated answers require a secure server-side AI connection.</p></section>
+        <section className="assistant-chat"><div className="assistant-chat-head"><div className="assistant-avatar">🧑‍🍳</div><div><b>Ask Dukandar</b><small><i></i> Ready to help</small></div></div><div className="assistant-messages">{assistantMessages.map((message,index)=><div key={index} className={`assistant-message ${message.role}`}>{message.role==="assistant"&&<span>🧑‍🍳</span>}<p>{message.text}</p></div>)}</div>{pendingAssistantItems.length > 0 && <div className="assistant-order-confirm"><b>🛒 Items to add</b>{pendingAssistantItems.map((item,index)=><div key={index}>{item.name} — <strong>{item.quantity} {item.unit}</strong></div>)}<button type="button" className="primary-button" onClick={confirmAssistantOrder}>Confirm & Add to Cart</button><button type="button" className="back-button" onClick={()=>setPendingAssistantItems([])}>Cancel</button></div>}<div className="recipe-import-box" style={{margin:"0 16px 16px",padding:16,border:"1px solid #dce8d8",borderRadius:14,background:"#f8fbf6"}}><b>🍽️ Found a recipe on Hello Kitchen?</b><p style={{margin:"6px 0 10px",color:"#687768",fontSize:".88rem"}}>Open Hello Kitchen, copy the ingredient list, then paste it here. We'll match ingredients to the store catalogue and add missing items as custom requests.</p><a href="https://www.hellokitchen.in/" target="_blank" rel="noopener noreferrer" className="back-button" style={{display:"inline-block",marginBottom:10}}>Open free Hello Kitchen ↗</a><textarea value={recipeImportText} onChange={e=>setRecipeImportText(e.target.value)} rows={4} placeholder="Paste ingredients here, e.g. 2 cups rice, 1 onion, 2 tomatoes, 1 tsp turmeric..." style={{display:"block",width:"100%",boxSizing:"border-box",padding:12,border:"1px solid #dce4d9",borderRadius:10,font:"inherit",resize:"vertical"}}/><button type="button" className="primary-button" style={{marginTop:10}} onClick={importRecipeIngredients}>Add recipe ingredients to cart</button><small style={{display:"block",marginTop:8,color:"#778275"}}>Recipe measurements are not the same as retail pack sizes. The store confirms the correct pack quantity before order confirmation.</small></div><div className="assistant-suggestions">{["Suggest breakfast recipes","What do I need for biryani?","Find rice in the store","Show me quick snacks"].map(q=><button key={q} onClick={()=>setAssistantInput(q)}>{q}</button>)}</div><form className="assistant-input-row" onSubmit={sendAssistantMessage}><input value={assistantInput} onChange={e=>setAssistantInput(e.target.value)} placeholder="Ask Dukandar anything..." /><button className="primary-button" type="submit">Send ↑</button></form><p className="assistant-note">Ask Dukandar uses the store catalogue and curated recipe knowledge. You can also explore Hello Kitchen for free and paste its ingredient list here. This is a recipe-import helper, not a live connection to Hello Kitchen.</p></section>
       </main>}
 
       {view === "admin" && <main className="admin-page">
@@ -614,7 +897,7 @@ export default function App() {
         {!count && !customCount ? <p className="empty">Your request list is empty. Add products first.</p> : <>
           <p>Review your requested items. <b>No payment is collected now.</b> We will send an estimate to your WhatsApp.</p>
           <div className="checkout-items">{cartItems.map(p => <div key={p.id}><span>{p.emoji} {p.name} ({p.unit})</span><div className="quantity"><button onClick={() => changeQty(p.id,-1)}>−</button><b>{cart[p.id]}</b><button onClick={() => changeQty(p.id,1)}>+</button></div></div>)}</div>
-          {customItems.length > 0 && <div><b>Other requested items:</b>{customItems.map((item,i) => <p key={`${item.name}-${i}`}>• {item.name} × {item.quantity} <button type="button" onClick={() => setCustomItems(old => old.filter((_,idx)=>idx!==i))}>Remove</button></p>)}</div>}
+          {customItems.length > 0 && <div><b>Other requested items:</b>{customItems.map((item,i) => <p key={`${item.name}-${i}`}>• {item.name} × {item.quantity} {item.unit || ""} <button type="button" onClick={() => setCustomItems(old => old.filter((_,idx)=>idx!==i))}>Remove</button></p>)}</div>}
           <p className="delivery-note">The store will check availability, add prices and send you an estimate on WhatsApp. Delivery is arranged only after you confirm.</p>
           <form className="customer-form" onSubmit={submitOrder}><h3>Your details</h3><input required placeholder="Your full name" value={customer.name} onChange={e=>setCustomer({...customer,name:e.target.value})}/><input required type="tel" maxLength="10" placeholder="10-digit WhatsApp mobile number" value={customer.phone} onChange={e=>setCustomer({...customer,phone:e.target.value.replace(/\D/g,"")})}/><textarea required placeholder="Full delivery address" value={customer.address} onChange={e=>setCustomer({...customer,address:e.target.value})}/>
             <div className="location-picker"><div><b>Share delivery location (optional)</b><p>Allow location access to help the store find your delivery address.</p></div><button type="button" className="location-button" onClick={captureLocation}>📍 {deliveryLocation ? "Update location" : "Use my current location"}</button>
@@ -625,6 +908,9 @@ export default function App() {
         </>}
       </div></div>}
       {submittedOrderId && <div className="modal-backdrop" role="dialog" aria-modal="true"><div className="checkout-modal" style={{maxWidth:480,textAlign:"center"}}><div className="login-icon">✓</div><span className="eyebrow">REQUEST RECEIVED</span><h2>Thank you!</h2><p>Your order request has been submitted successfully. The store will check availability and send your estimate on WhatsApp.</p><div style={{padding:18,background:"#f4f7f1",borderRadius:12,margin:"18px 0"}}><small>YOUR ORDER ID</small><h2 style={{letterSpacing:2}}>{submittedOrderId}</h2><button type="button" className="back-button" onClick={() => { navigator.clipboard?.writeText(submittedOrderId); showNotice("Order ID copied."); }}>Copy Order ID</button></div><p><b>Please save your Order ID for future reference.</b></p><button className="primary-button" type="button" onClick={() => setSubmittedOrderId("")}>Close</button></div></div>}
+      {welcomeOpen && view === "shop" && <div className="welcome-backdrop" role="dialog" aria-modal="true"><section className="welcome-card"><div className="welcome-shopkeeper">🧑🏻‍🍳</div><span className="eyebrow">BALAJI HOME NEEDS</span><h2>Namaste! Welcome home 👋</h2><p>I’m Ask Dukandar, your friendly grocery and cooking helper. Need a recipe, ingredients or help with your shopping list?</p><button type="button" className="sound-toggle" onClick={()=>setSoundEnabled(v=>!v)}>{soundEnabled ? "🔊 Greeting sound on" : "🔇 Greeting sound off"}</button><button type="button" className="primary-button" onClick={closeWelcome}>Meet Ask Dukandar →</button><button type="button" className="back-button" onClick={()=>{sessionStorage.setItem("balaji_welcome_seen","1");setWelcomeOpen(false);}}>Continue shopping</button></section></div>}
+      {dukandarOpen && <section className="dukandar-panel"><div className="dukandar-panel-head"><div className="dukandar-face">🧑🏻‍🍳</div><div><b>Ask Dukandar</b><small style={{display:"block",color:"#d9ead8"}}>Your friendly kitchen helper</small></div><button type="button" onClick={()=>setDukandarOpen(false)}>✕</button></div><div className="dukandar-panel-body"><p>Namaste! 🙏 What can I help you with today?</p><div className="dukandar-panel-actions"><button onClick={()=>{setDukandarOpen(false);setView("recipes");}}>📖 Explore recipes</button><button onClick={()=>{setDukandarOpen(false);setView("assistant");}}>💬 Chat with me</button><button onClick={()=>{setDukandarOpen(false);setView("shop");document.getElementById("products")?.scrollIntoView({behavior:"smooth"});}}>🛒 Find groceries</button></div></div></section>}
+      {!welcomeOpen && !dukandarOpen && <button type="button" className="dukandar-fab" onClick={()=>{setDukandarOpen(true);speakDukandarGreeting();}}><span className="dukandar-face">🧑🏻‍🍳</span><span>Ask Dukandar</span></button>}
       <footer><b>BALAJI HOME NEEDS</b><p>Everyday essentials, delivered with care.</p><small>© {new Date().getFullYear()} Balaji Home Needs. All rights reserved.</small></footer>
       {count + customCount > 0 && view === "shop" && <button className="floating-cart" onClick={()=>setCheckout(true)}>🛒 View Cart · {totalCartCount} items</button>}
       {notice && <div className="toast">{notice}</div>}
