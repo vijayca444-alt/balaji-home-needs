@@ -128,6 +128,12 @@ const productPhotoUrl = product => {
 };
 const heroPhotoUrl = "/kirana-hero.png";
 const statuses = ["Order Received", "Estimate Sent", "Customer Confirmed", "Preparing", "Out for Delivery", "Delivered", "Cancelled"];
+const recipeBook = [
+  { id:"sambar", name:"South Indian Sambar", cuisine:"Tamil Nadu", servings:4, ingredients:[["Toor Dal","1 cup (200 g)","500 g"],["Turmeric Powder","½ tsp","100 g"],["Sambar Powder","2 tbsp","100 g"],["Tomatoes","2 medium","1 kg"],["Onion","1 medium","1 kg"]] },
+  { id:"lemon-rice", name:"Lemon Rice", cuisine:"South Indian", servings:4, ingredients:[["Sona Masoori Rice","2 cups (400 g)","1 kg"],["Peanuts","2 tbsp (25 g)","250 g"],["Turmeric Powder","½ tsp","100 g"],["Mustard Seeds","1 tsp","100 g"]] },
+  { id:"pongal", name:"Ven Pongal", cuisine:"Tamil Nadu", servings:4, ingredients:[["Sona Masoori Rice","1 cup (200 g)","1 kg"],["Moong Dal","½ cup (100 g)","500 g"],["Cumin Seeds","1 tsp","100 g"],["Cow Ghee","2 tbsp","500 ml"]] },
+  { id:"chana", name:"Chana Masala", cuisine:"North Indian", servings:4, ingredients:[["Kabuli Chana","1 cup (200 g)","500 g"],["Onion","2 medium","1 kg"],["Tomatoes","2 medium","1 kg"],["Garam Masala","1 tsp","100 g"],["Coriander Powder","1 tbsp","200 g"]] }
+];
 // Balaji Home Needs shop location supplied by the owner.
 const STORE_LOCATION = { latitude: 17.326766725693464, longitude: 78.52105733068217 };
 const DELIVERY_RADIUS_KM = 3;
@@ -176,6 +182,10 @@ export default function App() {
   const [authMessage, setAuthMessage] = useState("");
   const [notice, setNotice] = useState("");
   const [orderFilter, setOrderFilter] = useState("All");
+  const [adminTab, setAdminTab] = useState("overview");
+  const [adminProductSearch, setAdminProductSearch] = useState("");
+  const [dukandarQuestion, setDukandarQuestion] = useState("");
+  const [dukandarReply, setDukandarReply] = useState("Vanakkam! Tell me what you need. I can help find items in our store catalogue.");
 
   useEffect(() => { localStorage.setItem("balaji_products", JSON.stringify(products)); }, [products]);
   useEffect(() => { localStorage.setItem("balaji_orders", JSON.stringify(orders)); }, [orders]);
@@ -256,9 +266,15 @@ export default function App() {
   const confirmedValue = salesOrders.reduce((sum, o) => sum + Number(o.total || getOrderValue(o)), 0);
   const uniqueCustomers = new Set(salesOrders.map(o => (o.customer?.phone || o.customer?.name || "").toLowerCase())).size;
   const productSales = Object.values(salesOrders.reduce((acc, order) => {
-    (order.items || []).forEach(item => { const key = item.name || "Product"; acc[key] = acc[key] || { name: key, qty: 0, value: 0 }; acc[key].qty += Number(item.quantity || 0); acc[key].value += Number(item.quotedPrice || 0) * Number(item.quantity || 0); });
+    (order.items || []).forEach(item => { const key = item.name || "Product"; acc[key] = acc[key] || { name: key, qty: 0, value: 0, category: item.category || "Other" }; acc[key].qty += Number(item.quantity || 0); acc[key].value += Number(item.quotedPrice || 0) * Number(item.quantity || 0); });
     return acc;
   }, {})).sort((a, b) => b.qty - a.qty).slice(0, 6);
+  const categorySales = Object.values(salesOrders.reduce((acc, order) => {
+    (order.items || []).forEach(item => { const key = item.category || "Other"; acc[key] = acc[key] || { name:key, value:0 }; acc[key].value += Number(item.quotedPrice || 0) * Number(item.quantity || 0); });
+    return acc;
+  }, {})).sort((a,b)=>b.value-a.value);
+  const orderStatusCounts = statuses.map(status => ({ name:status, value:orders.filter(o=>o.status===status).length })).filter(x=>x.value>0);
+  const repeatCustomers = Object.values(salesOrders.reduce((acc,o)=>{const key=(o.customer?.phone||o.customer?.name||"unknown").toLowerCase();acc[key]=(acc[key]||0)+1;return acc;},{})).filter(n=>n>1).length;
   function getOrderValue(order) {
     return [...(order.items || []), ...(order.customItems || [])].reduce((sum, item) => sum + Number(item.quotedPrice || 0) * Number(item.quantity || 1), 0);
   }
@@ -276,6 +292,43 @@ export default function App() {
       if (!next[id]) delete next[id];
       return next;
     });
+  }
+  function toggleProductPause(id) {
+    const updated = products.map(p => p.id === id ? { ...p, paused: !p.paused } : p);
+    setProducts(updated);
+    const changed = updated.find(p => p.id === id);
+    if (supabaseReady && changed) supabase.from("products").upsert({ id: changed.id, payload: changed })
+      .then(({ error }) => { if (error) showNotice("Stock status could not be saved: " + error.message); });
+    showNotice(changed?.paused ? "Item paused and hidden from customers." : "Item resumed and visible in the store.");
+  }
+  function addRecipeToCart(recipe) {
+    recipe.ingredients.forEach(([name, need, pack]) => {
+      const product = products.find(p => p.name.toLowerCase() === name.toLowerCase() && !p.paused);
+      if (product) {
+        setCart(old => ({ ...old, [product.id]: Math.max(1, Number(old[product.id] || 0)) }));
+        setCartRecipeNeeds(old => ({ ...old, [product.id]: need }));
+        setCartPurchaseUnits(old => ({ ...old, [product.id]: pack }));
+      } else {
+        setCustomItems(old => [...old, { name, quantity: 1, purchaseUnit: pack, recipeNeed: need, quotedPrice: "" }]);
+      }
+    });
+    showNotice("Recipe ingredients added. Recipe measurements and shopping pack sizes are kept separate.");
+    setCheckout(true);
+  }
+  function askDukandar(e) {
+    e.preventDefault();
+    const q = dukandarQuestion.trim().toLowerCase();
+    if (!q) return;
+    const found = products.filter(p => !p.paused && q.includes(p.name.toLowerCase()));
+    if (found.length) {
+      found.forEach(p => setCart(old => ({ ...old, [p.id]: Math.max(1, Number(old[p.id] || 0)) })));
+      setDukandarReply("Vanakkam! I found " + found.map(p => p.name).join(", ") + " and added the item(s) to your cart. Please review your list.");
+    } else {
+      setCustomItem(dukandarQuestion);
+      setDukandarReply("I couldn't find an exact match. I've copied your request into the item-request box for the shopkeeper to confirm.");
+      document.getElementById("custom-request")?.scrollIntoView({ behavior:"smooth", block:"center" });
+    }
+    setDukandarQuestion("");
   }
   function addCustomItem(e) {
     e.preventDefault();
@@ -417,7 +470,7 @@ export default function App() {
         <button className="brand" onClick={() => { setView("shop"); setCategory("All"); }}>
           <span className="brand-icon">🛒</span><span><b>BALAJI</b><small>HOME NEEDS</small></span>
         </button>
-        <input className="search-box" placeholder="⌕  Search rice, oil, snacks and more..." value={search}
+        <input className="search-box" placeholder="⌕  Search products — can’t find an item? Request it here..." value={search}
           onChange={e => { setSearch(e.target.value); setView("shop"); }} />
         <div className="header-actions">
           <button onClick={() => { setView("admin"); setAdmin(false); }}>♙ Admin</button>
@@ -448,15 +501,14 @@ export default function App() {
             <span>{["🛍️","🍚","🫘","🫒","🌶️","🧂","🍪","🍟","🍫","☕","🥛","🍞","🍎","🥕","🧴","🧼","💇","🪥","🧹","🫧","🧺","🍽️","🪔","👶","💊","🥤","🍜","🥜","🐾","📒"][i]}</span>{c}
           </button>)}</div>
         </section>
-        <section className="products-section" id="products">
-          <div className="section-heading"><div><span className="eyebrow">ADD WHAT YOU NEED</span><h2>{category === "All" ? "Browse all products" : category}</h2></div><span>{filteredProducts.length} items</span></div>
-          <div className="product-grid">{filteredProducts.map(p => <article className="product-card" key={p.id}>
-            <div className="product-picture"><img src={productPhotoUrl(p)} alt={`Real photo of ${p.name}`} loading="lazy" onError={e => { e.currentTarget.style.display = "none"; e.currentTarget.parentElement.classList.add("photo-unavailable"); }} /><span className="photo-unavailable-label">Photo unavailable</span></div><div className="product-info"><small>{p.category}</small><h3>{p.name}</h3><p>{p.unit}</p>
-              <div className="product-bottom"><b>Add to cart</b>{cart[p.id] ? <div className="quantity"><button onClick={() => changeQty(p.id, -1)}>−</button><b>{cart[p.id]}</b><button onClick={() => changeQty(p.id, 1)}>+</button></div> : <button className="add-button" onClick={() => changeQty(p.id, 1)}>＋ Add</button>}</div>
-            </div></article>)}</div>
-          {!filteredProducts.length && <p className="empty">No products found. Try another search or request it below.</p>}
+        <section className="dukandar-card" style={{display:"grid",gridTemplateColumns:"76px minmax(0,1fr)",gap:14,alignItems:"center",padding:16,margin:"18px 0",border:"1px solid #d8e6d3",borderRadius:18,background:"linear-gradient(110deg,#f0f8e9,#fff8e9)"}}>
+          <img src="/dukandar-avatar.png" alt="Traditional Tamil grocery shopkeeper" style={{width:76,height:76,objectFit:"cover",objectPosition:"center",borderRadius:"50%",border:"3px solid #b77937",background:"#f4dfbd"}} onError={e=>{e.currentTarget.style.display="none";}} />
+          <div><b style={{fontSize:18}}>Ask Dukandar · வணக்கம்!</b><p style={{margin:"4px 0 10px",color:"#536253"}}>Ask for a grocery item. I’ll check the store list or help you request something not listed.</p>
+            <form onSubmit={askDukandar} style={{display:"flex",gap:8,flexWrap:"wrap"}}><input value={dukandarQuestion} onChange={e=>setDukandarQuestion(e.target.value)} placeholder="e.g. I need Toor Dal..." style={{flex:"1 1 230px",padding:12,border:"1px solid #cbd8ca",borderRadius:10}}/><button className="primary-button">Ask Dukandar</button></form>
+            <small style={{display:"block",marginTop:8,color:"#52644f"}}>{dukandarReply}</small>
+          </div>
         </section>
-        <section className="custom-section"><div><span className="eyebrow">CAN'T FIND WHAT YOU NEED?</span><h2>Request any other item</h2><p>Enter the recipe measurement separately from the pack size you want to buy. The shop will confirm availability.</p></div>
+        <section className="custom-section" id="custom-request"><div><span className="eyebrow">NEED SOMETHING ELSE?</span><h2>Can’t find an item? Request it here</h2><p>Enter the recipe measurement separately from the pack size you want to buy. The shop will confirm availability.</p></div>
           <form onSubmit={addCustomItem} style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(145px,1fr))",gap:10,width:"100%"}}>
             <input value={customItem} onChange={e => setCustomItem(e.target.value)} placeholder="Enter item name..." required />
             <input value={customRecipeNeed} onChange={e => setCustomRecipeNeed(e.target.value)} placeholder="Recipe needs e.g. 2 cups (400 g)" aria-label="Recipe requirement" />
@@ -465,22 +517,42 @@ export default function App() {
             <button className="primary-button">Add shopping request</button>
           </form>
         </section>
+
+        <section className="panel" style={{margin:"18px 0"}}>
+          <div className="section-heading"><div><span className="eyebrow">COOK SOMETHING TODAY</span><h2>Recipe book</h2><p>Choose a recipe to add its ingredients to your cart.</p></div></div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",gap:12}}>
+            {recipeBook.map(recipe=><article key={recipe.id} style={{padding:14,border:"1px solid #e1e8dc",borderRadius:14,background:"#fff"}}>
+              <small style={{color:"#66765e"}}>{recipe.cuisine} · Serves {recipe.servings}</small><h3 style={{margin:"6px 0"}}>{recipe.name}</h3>
+              <p style={{fontSize:13,color:"#5f6b5b"}}>{recipe.ingredients.map(x=>`${x[0]} (${x[1]})`).join(" · ")}</p>
+              <button className="primary-button" type="button" onClick={()=>addRecipeToCart(recipe)}>Add recipe ingredients</button>
+            </article>)}
+          </div>
+        </section>
+        <section className="products-section" id="products">
+          <div className="section-heading"><div><span className="eyebrow">ADD WHAT YOU NEED</span><h2>{category === "All" ? "Browse all products" : category}</h2></div><span>{filteredProducts.length} items</span></div>
+          <div className="product-grid">{filteredProducts.map(p => <article className="product-card" key={p.id}>
+            <div className="product-picture"><img src={productPhotoUrl(p)} alt={`Real photo of ${p.name}`} loading="lazy" onError={e => { e.currentTarget.style.display = "none"; e.currentTarget.parentElement.classList.add("photo-unavailable"); }} /><span className="photo-unavailable-label">Photo unavailable</span></div><div className="product-info"><small>{p.category}</small><h3>{p.name}</h3><p>{p.unit}</p>
+              <div className="product-bottom"><b>Add to cart</b>{cart[p.id] ? <div className="quantity"><button onClick={() => changeQty(p.id, -1)}>−</button><b>{cart[p.id]}</b><button onClick={() => changeQty(p.id, 1)}>+</button></div> : <button className="add-button" onClick={() => changeQty(p.id, 1)}>＋ Add</button>}</div>
+            </div></article>)}</div>
+          {!filteredProducts.length && <p className="empty">No products found. Try another search or request it below.</p>}
+        </section>
         {customItems.length > 0 && <p className="custom-added">Requested: {customItems.map(item => `${item.name}: buying ${item.quantity} × ${item.purchaseUnit}${item.recipeNeed ? ` (recipe needs ${item.recipeNeed})` : ""}`).join(", ")} <button onClick={() => setCustomItems([])}>Clear</button></p>}
       </main>}
 
       {view === "admin" && <main className="admin-page">
         {!admin ? <form className="login-card" onSubmit={login}><div className="login-icon">🔐</div><h2>Store Admin</h2><p>Sign in using your authorised admin email and password.</p><input type="email" value={adminEmail} onChange={e => setAdminEmail(e.target.value)} placeholder="Admin email" required /><input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} placeholder="Admin password" autoComplete="current-password" required /><button className="primary-button">Login</button>{authMessage && <p className="delivery-note">{authMessage}</p>}<button type="button" className="back-button" onClick={() => setView("shop")}>← Back to store</button></form> :
           <>
-            <div className="admin-heading"><div><span className="eyebrow">STORE MANAGEMENT</span><h1>Admin Dashboard</h1><p>Review requests, enter prices and send estimates on WhatsApp.</p></div><button className="back-button" onClick={() => { supabaseReady && supabase.auth.signOut(); setAdmin(false); setView("shop"); }}>← Store</button></div>
-            <div className="stats-grid"><div><small>Total requests</small><h2>{orders.length}</h2></div><div><small>New requests</small><h2>{orders.filter(o => o.status === "Order Received").length}</h2></div><div><small>Awaiting confirmation</small><h2>{orders.filter(o => o.status === "Estimate Sent").length}</h2></div><div><small>Confirmed orders</small><h2>{orders.filter(o => ["Customer Confirmed","Preparing","Out for Delivery","Delivered"].includes(o.status)).length}</h2></div></div>
-            <section className="panel analytics-panel">
+            <div className="admin-heading"><div><span className="eyebrow">STORE MANAGEMENT</span><h1>Admin Dashboard</h1><p>Review requests, enter prices and send estimates on WhatsApp.</p></div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="back-button" onClick={() => { supabaseReady && supabase.auth.signOut(); setAdmin(false); setView("shop"); }}>← Store</button><button className="primary-button" onClick={() => { supabaseReady && supabase.auth.signOut(); setAdmin(false); setView("shop"); }}>Logout</button></div></div>
+            <nav style={{display:"flex",gap:8,flexWrap:"wrap",margin:"18px 0"}}>{[["overview","Overview"],["analytics","Analytics & EDA"],["orders","Orders"],["stock","Products & Stock"]].map(([id,label])=><button key={id} type="button" className={adminTab===id?"primary-button":"back-button"} onClick={()=>{setAdminTab(id); document.getElementById(id==="analytics"?"admin-analytics":id==="orders"?"admin-orders":id==="stock"?"admin-stock":"admin-overview")?.scrollIntoView({behavior:"smooth",block:"start"});}}>{label}</button>)}</nav>
+            <div className="stats-grid" id="admin-overview"><div><small>Total requests</small><h2>{orders.length}</h2></div><div><small>New requests</small><h2>{orders.filter(o => o.status === "Order Received").length}</h2></div><div><small>Awaiting confirmation</small><h2>{orders.filter(o => o.status === "Estimate Sent").length}</h2></div><div><small>Confirmed orders</small><h2>{orders.filter(o => ["Customer Confirmed","Preparing","Out for Delivery","Delivered"].includes(o.status)).length}</h2></div></div>
+            <section className="panel analytics-panel" id="admin-analytics">
               <div className="section-heading"><div><span className="eyebrow">BUSINESS OVERVIEW</span><h2>Retail performance</h2></div><button className="primary-button" type="button" onClick={exportSalesCsv}>Download sales CSV</button></div>
               <p className="delivery-note">Sales figures include confirmed, preparing, out-for-delivery and delivered orders only. Pending estimates and cancelled orders are excluded.</p>
               <div className="stats-grid"><div><small>Confirmed sales value</small><h2>{money(confirmedValue)}</h2></div><div><small>Confirmed orders</small><h2>{salesOrders.length}</h2></div><div><small>Unique customers</small><h2>{uniqueCustomers}</h2></div><div><small>Average order value</small><h2>{money(salesOrders.length ? confirmedValue / salesOrders.length : 0)}</h2></div></div>
               <div className="section-heading"><h2>Top requested products</h2><span>By confirmed quantity</span></div>
               {productSales.length ? <div className="sales-bars">{productSales.map(item => <div className="sales-bar-row" key={item.name}><div><b>{item.name}</b><span>{item.qty} units · {money(item.value)}</span></div><div className="sales-bar-track"><i style={{width: `${Math.max(4, item.qty / productSales[0].qty * 100)}%`}} /></div></div>)}</div> : <p className="empty">Confirmed sales data will appear here after customers confirm orders and item prices are entered.</p>}
             </section>
-            <section className="panel"><div className="section-heading"><h2>Customer order requests</h2><select value={orderFilter} onChange={e => setOrderFilter(e.target.value)}><option>All</option>{statuses.map(s => <option key={s}>{s}</option>)}</select></div>
+            <section className="panel" id="admin-orders"><div className="section-heading"><h2>Customer order requests</h2><select value={orderFilter} onChange={e => setOrderFilter(e.target.value)}><option>All</option>{statuses.map(s => <option key={s}>{s}</option>)}</select></div>
               {!orders.filter(o => orderFilter === "All" || o.status === orderFilter).length && <p className="empty">No customer requests yet.</p>}
               {orders.filter(o => orderFilter === "All" || o.status === orderFilter).map(o => <div className="order-card" key={o.id}>
                 <div className="order-top"><b>{o.id}</b><span>{o.date}</span><strong>{o.status}</strong></div>
@@ -501,13 +573,14 @@ export default function App() {
             <section className="panel"><div className="section-heading"><h2>Deleted orders ({deletedOrders.length})</h2><button className="back-button" type="button" onClick={() => setShowDeleted(v => !v)}>{showDeleted ? "Hide" : "View deleted orders"}</button></div>
               {showDeleted && (deletedOrders.length ? deletedOrders.map(o => <div className="order-card" key={o.id}><div className="order-top"><b>{o.id}</b><span>Deleted: {o.deletedAt || "—"}</span><strong>{o.status}</strong></div><p>{o.customer?.name} · {o.customer?.phone}</p><div className="deleted-actions"><button className="primary-button" type="button" onClick={() => restoreOrder(o.id)}>Restore order</button><button className="delete-order-button" type="button" onClick={() => permanentlyDeleteOrder(o.id)}>Permanently delete</button></div></div>) : <p className="empty">No deleted orders.</p>)}
             </section>
-            <section className="panel"><h2>Manage product catalogue</h2><p className="delivery-note">Add products available in your shop. No prices are shown to customers.</p>
+            <section className="panel" id="admin-stock"><h2>Manage product catalogue & stock visibility</h2><p className="delivery-note">Add products available in your shop. No prices are shown to customers.</p>
               <form className="add-product-form" onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); const name = String(f.get("name")).trim(); if (!name) return; const product = {id:Date.now(),name,category:f.get("category"),unit:f.get("unit") || "Piece",emoji:"🛒",imageUrl:String(f.get("imageUrl") || "").trim()}; setProducts(old => [...old,product]); if (supabaseReady) supabase.from("products").upsert({id:product.id,payload:product}); e.currentTarget.reset(); showNotice("Product added to catalogue."); }}>
                 <input name="name" placeholder="Product name" required /><input name="unit" placeholder="Unit e.g. 1 kg" /><input name="imageUrl" type="url" placeholder="Real product photo URL (optional)" /><select name="category">{categories.slice(1).map(c => <option key={c}>{c}</option>)}</select><button className="primary-button">Add product</button>
               </form>
-              {products.map(p => <div className="manage-product" key={p.id}><span>{p.emoji} {p.name} · {p.category}</span><button onClick={() => {if(window.confirm("Delete this product?")) setProducts(old => old.filter(x => x.id !== p.id));}}>Delete</button></div>)}
+              <input value={adminProductSearch} onChange={e=>setAdminProductSearch(e.target.value)} placeholder="Search catalogue..." style={{width:"100%",padding:10,margin:"12px 0",border:"1px solid #ccd8c8",borderRadius:9}}/>
+              {products.filter(p=>p.name.toLowerCase().includes(adminProductSearch.toLowerCase())).map(p => <div className="manage-product" key={p.id}><span>{p.emoji} {p.name} · {p.category}<br/><small>{p.paused ? "Paused — hidden from customers" : "Active — visible to customers"}</small></span><div style={{display:"flex",gap:8}}><button type="button" onClick={()=>toggleProductPause(p.id)}>{p.paused ? "Resume stock" : "Pause / Hide"}</button><button onClick={() => {if(window.confirm("Delete this product?")) setProducts(old => old.filter(x => x.id !== p.id));}}>Delete</button></div></div>)}
             </section>
-            <button className="back-button" onClick={() => {supabaseReady && supabase.auth.signOut(); setAdmin(false);setView("shop");}}>Logout</button>
+
           </>}
       </main>}
 
