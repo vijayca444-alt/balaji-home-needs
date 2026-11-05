@@ -186,6 +186,7 @@ export default function App() {
   const [adminProductSearch, setAdminProductSearch] = useState("");
   const [dukandarQuestion, setDukandarQuestion] = useState("");
   const [dukandarReply, setDukandarReply] = useState("Vanakkam! Tell me what you need. I can help find items in our store catalogue.");
+  const [recipeImportText, setRecipeImportText] = useState("");
 
   useEffect(() => { localStorage.setItem("balaji_products", JSON.stringify(products)); }, [products]);
   useEffect(() => { localStorage.setItem("balaji_orders", JSON.stringify(orders)); }, [orders]);
@@ -330,6 +331,39 @@ export default function App() {
     }
     setDukandarQuestion("");
   }
+  function importHelloKitchenIngredients(e) {
+    e.preventDefault();
+    const pasted = recipeImportText.trim();
+    if (!pasted) { showNotice("Paste the ingredient list from Hello Kitchen first."); return; }
+    const chunks = pasted
+      .replace(/\r/g, "\n")
+      .split(/\n|,|;|\u2022/)
+      .map(x => x.replace(/^[-*\s]+/, "").trim())
+      .filter(Boolean);
+    const parsed = chunks.map(chunk => {
+      const match = chunk.match(/^(\d+(?:\.\d+)?\s*(?:cups?|tbsp|tablespoons?|tsp|teaspoons?|kg|kgs|g|grams?|ml|l|litres?|liters?|medium|large|small|pieces?|pcs|cloves?|pinch(?:es)?)?)\s+(?:of\s+)?(.+)$/i);
+      return { need: match ? match[1].trim() : "As listed in recipe", name: (match ? match[2] : chunk).replace(/[.!]+$/, "").trim() };
+    }).filter(x => x.name);
+    if (!parsed.length) { showNotice("I couldn't read the ingredient list. Paste one ingredient per line."); return; }
+    let matchedCount = 0;
+    let customCountAdded = 0;
+    parsed.forEach(item => {
+      const key = item.name.toLowerCase();
+      const product = products.find(p => !p.paused && (p.name.toLowerCase() === key || p.name.toLowerCase().includes(key) || key.includes(p.name.toLowerCase())));
+      if (product) {
+        matchedCount += 1;
+        setCart(old => ({ ...old, [product.id]: Math.max(1, Number(old[product.id] || 0)) }));
+        setCartRecipeNeeds(old => ({ ...old, [product.id]: item.need }));
+        setCartPurchaseUnits(old => ({ ...old, [product.id]: old[product.id] || product.unit || "1 pack" }));
+      } else {
+        customCountAdded += 1;
+        setCustomItems(old => [...old, { name: item.name, quantity: 1, purchaseUnit: "500 g", recipeNeed: item.need, source: "Hello Kitchen recipe import" }]);
+      }
+    });
+    setRecipeImportText("");
+    showNotice(`${parsed.length} ingredients imported: ${matchedCount} matched to store products and ${customCountAdded} sent as custom requests. Review pack sizes in your cart.`);
+  }
+
   function addCustomItem(e) {
     e.preventDefault();
     if (customItem.trim()) {
@@ -526,6 +560,17 @@ export default function App() {
               <p style={{fontSize:13,color:"#5f6b5b"}}>{recipe.ingredients.map(x=>`${x[0]} (${x[1]})`).join(" · ")}</p>
               <button className="primary-button" type="button" onClick={()=>addRecipeToCart(recipe)}>Add recipe ingredients</button>
             </article>)}
+          </div>
+          <div style={{marginTop:18,padding:18,border:"1px solid #d8e6d3",borderRadius:16,background:"linear-gradient(110deg,#f0f8e9,#fff8e9)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+              <div style={{flex:"1 1 260px"}}><span className="eyebrow">MORE RECIPE IDEAS</span><h3 style={{margin:"5px 0"}}>Explore Hello Kitchen</h3><p style={{margin:"0 0 8px",color:"#536253"}}>Find a recipe on Hello Kitchen, copy its ingredient list and paste it below. Ask Dukandar will match items with the Balaji Home Needs catalogue.</p></div>
+              <a className="primary-button" href="https://www.hellokitchen.in/" target="_blank" rel="noopener noreferrer" style={{textDecoration:"none",display:"inline-block"}}>Open Hello Kitchen ↗</a>
+            </div>
+            <form onSubmit={importHelloKitchenIngredients} style={{marginTop:10}}>
+              <label htmlFor="hello-kitchen-ingredients" style={{display:"block",fontWeight:700,marginBottom:7}}>Paste recipe ingredients</label>
+              <textarea id="hello-kitchen-ingredients" value={recipeImportText} onChange={e=>setRecipeImportText(e.target.value)} rows={4} placeholder={"Example:\n2 cups rice\n1 onion\n2 tomatoes\n1 tsp turmeric powder"} style={{display:"block",width:"100%",boxSizing:"border-box",padding:12,border:"1px solid #cbd8ca",borderRadius:10,font:"inherit",resize:"vertical"}} />
+              <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginTop:10}}><button className="primary-button" type="submit">Import ingredients to cart</button><small style={{color:"#657260"}}>Matched products are added to your cart; unavailable items become custom requests.</small></div>
+            </form>
           </div>
         </section>
         <section className="products-section" id="products">
