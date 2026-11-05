@@ -25,6 +25,106 @@ const initialProducts = [
   ["Steel Plates","Kitchen Needs","🍽️","Set"],["Storage Containers","Kitchen Needs","🥡","Set"],["Agarbatti","Pooja Items","🪔","Pack"],["Camphor","Pooja Items","🪔","Pack"],["Baby Powder","Baby Care","👶","Pack"],["Baby Soap","Baby Care","🧼","Piece"],["Mineral Water","Beverages","💧","1 L"],["Soft Drinks","Beverages","🥤","Bottle"],["Noodles","Instant Foods","🍜","Pack"],["Ready Mix","Instant Foods","🥣","Pack"],["Cashew Nuts","Dry Fruits","🥜","250 g"],["Almonds","Dry Fruits","🥜","250 g"],["Raisins","Dry Fruits","🍇","250 g"],["Pet Food","Pet Care","🐾","Pack"],["Notebook","Stationery","📒","Piece"]
 ].map((p, i) => ({ id: i + 1, name: p[0], category: p[1], emoji: p[2], unit: p[3] }));
 
+
+const recipeBook = [
+  {
+    id: "veg-biryani", title: "Vegetable Biryani", category: "Lunch & Dinner",
+    time: "40 min", difficulty: "Medium", servings: 4, emoji: "🍲",
+    description: "A fragrant one-pot rice dish with vegetables and warming spices.",
+    ingredients: [
+      { name: "Basmati Rice", quantity: 2, unit: "cups" }, { name: "Onion", quantity: 2, unit: "medium" },
+      { name: "Tomatoes", quantity: 2, unit: "medium" }, { name: "Carrot", quantity: 1, unit: "cup" },
+      { name: "Green Chilli", quantity: 2, unit: "pieces" }, { name: "Curd", quantity: 0.5, unit: "cup" },
+      { name: "Coriander Leaves", quantity: 1, unit: "bunch" }, { name: "Garam Masala", quantity: 2, unit: "tsp" }
+    ],
+    steps: ["Wash and soak the basmati rice for 20 minutes.", "Slice the onions and chop the vegetables and tomatoes.", "Cook onions, tomatoes, vegetables, green chilli and spices until fragrant.", "Add curd, rice and water; mix gently.", "Cover and cook until the rice is tender. Rest for 5 minutes before serving."]
+  },
+  {
+    id: "idli", title: "Soft Idli", category: "Breakfast",
+    time: "25 min* plus batter fermentation", difficulty: "Easy", servings: 4, emoji: "🥥",
+    description: "Pillowy steamed idlis, perfect with chutney or sambar.",
+    ingredients: [
+      { name: "Urad Dal", quantity: 1, unit: "cup" }, { name: "Rice", quantity: 3, unit: "cups" },
+      { name: "Iodised Salt", quantity: 1, unit: "tsp" }
+    ],
+    steps: ["Soak rice and urad dal separately for 4–6 hours.", "Grind to a smooth batter and mix with salt.", "Ferment the batter overnight in a warm place.", "Pour into greased idli moulds.", "Steam for 10–12 minutes and serve hot."]
+  },
+  {
+    id: "sambar", title: "Andhra-style Sambar", category: "Lunch & Dinner",
+    time: "35 min", difficulty: "Easy", servings: 4, emoji: "🥣",
+    description: "Comforting lentil and vegetable sambar with a tangy finish.",
+    ingredients: [
+      { name: "Toor Dal", quantity: 1, unit: "cup" }, { name: "Tomatoes", quantity: 2, unit: "pieces" },
+      { name: "Onion", quantity: 1, unit: "piece" }, { name: "Carrot", quantity: 1, unit: "piece" },
+      { name: "Tamarind", quantity: 1, unit: "small lemon-sized ball" }, { name: "Sambar Powder", quantity: 2, unit: "tbsp" },
+      { name: "Turmeric Powder", quantity: 0.5, unit: "tsp" }, { name: "Mustard Seeds", quantity: 1, unit: "tsp" }
+    ],
+    steps: ["Pressure-cook toor dal with turmeric until soft.", "Soak tamarind in warm water and extract the pulp.", "Cook chopped vegetables and onion until tender.", "Add tamarind extract and sambar powder; simmer.", "Stir in mashed dal and simmer for 5 minutes. Temper mustard seeds and add."]
+  },
+  {
+    id: "dosa", title: "Crispy Dosa", category: "Breakfast",
+    time: "20 min* plus batter fermentation", difficulty: "Easy", servings: 4, emoji: "🥞",
+    description: "Golden, crisp dosa made with a fermented rice and lentil batter.",
+    ingredients: [
+      { name: "Rice", quantity: 3, unit: "cups" }, { name: "Urad Dal", quantity: 1, unit: "cup" },
+      { name: "Iodised Salt", quantity: 1, unit: "tsp" }, { name: "Sunflower Oil", quantity: 2, unit: "tbsp" }
+    ],
+    steps: ["Soak rice and urad dal separately for 4–6 hours.", "Grind, combine and ferment the batter overnight.", "Add salt and adjust the batter with a little water.", "Spread a ladle of batter thinly on a hot tawa.", "Drizzle oil around the edges and cook until crisp; fold and serve."]
+  },
+  {
+    id: "poha", title: "Quick Vegetable Poha", category: "Breakfast",
+    time: "20 min", difficulty: "Easy", servings: 2, emoji: "🍋",
+    description: "A light breakfast with flattened rice, vegetables and a gentle spice tempering.",
+    ingredients: [
+      { name: "Poha", quantity: 2, unit: "cups" }, { name: "Onion", quantity: 1, unit: "piece" },
+      { name: "Peanuts", quantity: 0.25, unit: "cup" }, { name: "Green Chilli", quantity: 1, unit: "piece" },
+      { name: "Turmeric Powder", quantity: 0.25, unit: "tsp" }, { name: "Coriander Leaves", quantity: 0.25, unit: "bunch" }
+    ],
+    steps: ["Rinse poha briefly and drain; let it soften.", "Sauté peanuts until crisp and set aside.", "Cook onion and green chilli until soft.", "Add turmeric and poha; toss gently.", "Finish with peanuts and coriander leaves."]
+  },
+  {
+    id: "pakoda", title: "Onion Pakoda", category: "Snacks",
+    time: "25 min", difficulty: "Easy", servings: 4, emoji: "🧅",
+    description: "Crispy onion fritters for a rainy-day tea-time snack.",
+    ingredients: [
+      { name: "Besan", quantity: 1, unit: "cup" }, { name: "Onion", quantity: 2, unit: "large" },
+      { name: "Green Chilli", quantity: 2, unit: "pieces" }, { name: "Red Chilli Powder", quantity: 0.5, unit: "tsp" },
+      { name: "Sunflower Oil", quantity: 2, unit: "cups for frying" }
+    ],
+    steps: ["Slice onions thinly and chop green chillies.", "Mix onion with chilli powder and a pinch of salt.", "Add besan gradually to make a lightly coated mixture.", "Heat oil and drop small portions carefully.", "Fry until crisp and golden; drain and serve hot."]
+  },
+  {
+    id: "payasam", title: "Rice Payasam", category: "Sweets",
+    time: "35 min", difficulty: "Easy", servings: 4, emoji: "🥛",
+    description: "A creamy traditional dessert made with rice, milk and cardamom.",
+    ingredients: [
+      { name: "Rice", quantity: 0.5, unit: "cup" }, { name: "Fresh Milk", quantity: 1, unit: "litre" },
+      { name: "Sugar", quantity: 0.5, unit: "cup" }, { name: "Cashew Nuts", quantity: 2, unit: "tbsp" },
+      { name: "Raisins", quantity: 1, unit: "tbsp" }, { name: "Cow Ghee", quantity: 1, unit: "tbsp" }
+    ],
+    steps: ["Wash rice and drain.", "Bring milk to a gentle boil in a heavy pan.", "Add rice and simmer, stirring often, until soft.", "Add sugar and cook until dissolved.", "Fry cashews and raisins in ghee; add to the payasam and serve warm or chilled."]
+  },
+  {
+    id: "lemon-rice", title: "South Indian Lemon Rice", category: "Lunch & Dinner",
+    time: "20 min", difficulty: "Easy", servings: 3, emoji: "🍋",
+    description: "A bright, tangy rice dish with peanuts and a simple tempering.",
+    ingredients: [
+      { name: "Rice", quantity: 2, unit: "cups cooked" }, { name: "Peanuts", quantity: 0.25, unit: "cup" },
+      { name: "Mustard Seeds", quantity: 1, unit: "tsp" }, { name: "Green Chilli", quantity: 2, unit: "pieces" },
+      { name: "Turmeric Powder", quantity: 0.25, unit: "tsp" }, { name: "Coriander Leaves", quantity: 0.25, unit: "bunch" }
+    ],
+    steps: ["Cook rice and spread it on a plate to cool.", "Roast peanuts until crisp.", "Temper mustard seeds and green chillies in a little oil.", "Add turmeric and cooked rice; toss gently.", "Turn off the heat, add lemon juice and coriander leaves, then mix."]
+  }
+];
+
+const recipePackages = [
+  { id: "breakfast-pack", title: "South Indian Breakfast Pack", description: "Everyday essentials for idli, dosa and upma.", recipeIds: ["idli", "dosa", "poha"], emoji: "🌅" },
+  { id: "biryani-pack", title: "Biryani Night Pack", description: "Rice, vegetables and spices for a family biryani.", recipeIds: ["veg-biryani"], emoji: "🍲" },
+  { id: "sambar-pack", title: "Sambar & Rice Pack", description: "A pantry starter for a comforting South Indian meal.", recipeIds: ["sambar", "lemon-rice"], emoji: "🥣" },
+  { id: "snack-pack", title: "Tea-time Snack Pack", description: "Build a cosy snack break with homemade pakoda.", recipeIds: ["pakoda"], emoji: "☕" },
+  { id: "sweet-pack", title: "Festival Sweet Pack", description: "Ingredients for a traditional rice payasam.", recipeIds: ["payasam"], emoji: "🪔" }
+];
+
 const money = n => "₹" + Number(n || 0).toFixed(2);
 
 // Product-specific real-photo searches. Each item gets its own keyword and lock ID.
@@ -158,6 +258,13 @@ export default function App() {
   const [authMessage, setAuthMessage] = useState("");
   const [notice, setNotice] = useState("");
   const [orderFilter, setOrderFilter] = useState("All");
+  const [recipeSearch, setRecipeSearch] = useState("");
+  const [recipeCategory, setRecipeCategory] = useState("All");
+  const [activeRecipe, setActiveRecipe] = useState(null);
+  const [assistantInput, setAssistantInput] = useState("");
+  const [assistantMessages, setAssistantMessages] = useState([
+    { role: "assistant", text: "Namaste! I'm Ask Dukandar. Tell me what you want to cook or which grocery item you need. I can help you explore recipes and add matching store items to your cart." }
+  ]);
 
   useEffect(() => { localStorage.setItem("balaji_products", JSON.stringify(products)); }, [products]);
   useEffect(() => { localStorage.setItem("balaji_orders", JSON.stringify(orders)); }, [orders]);
@@ -367,6 +474,22 @@ export default function App() {
 .photo-unavailable-label { display:none; min-height:150px; place-items:center; color:#687568; font-size:.85rem; }
 .product-picture.photo-unavailable .photo-unavailable-label { display:grid; }
 .hero-photo { background-size:cover; background-position:center; background-repeat:no-repeat; }
+.recipe-page,.assistant-page{max-width:1200px;margin:0 auto;padding:30px 24px 70px}
+.recipe-hero{min-height:300px;border-radius:28px;padding:48px;display:flex;align-items:center;justify-content:space-between;gap:24px;overflow:hidden;background:linear-gradient(120deg,#153d2b,#286b45 62%,#e6a84b);color:#fff;position:relative}
+.recipe-hero>div:first-child{max-width:620px;position:relative;z-index:1}.recipe-hero h1{font-size:clamp(2.5rem,5vw,4.6rem);line-height:1.02;margin:12px 0}.recipe-hero p{font-size:1.08rem;line-height:1.7;max-width:560px;color:#edf5eb}.recipe-hero .eyebrow{color:#f5d69b}
+.recipe-hero-art{width:300px;height:250px;position:relative;display:grid;place-items:center;flex-shrink:0}.recipe-hero-art span{font-size:150px;filter:drop-shadow(0 18px 18px #102b1b66);animation:recipeFloat 4s ease-in-out infinite}.recipe-hero-art i,.recipe-hero-art b,.recipe-hero-art em{position:absolute;font-style:normal;font-size:42px;animation:recipeFloat 5s ease-in-out infinite}.recipe-hero-art i{top:12px;left:18px}.recipe-hero-art b{right:0;top:30px}.recipe-hero-art em{bottom:10px;left:50px}
+@keyframes recipeFloat{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-12px) rotate(4deg)}}
+.recipe-feature-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:22px 0 42px}.recipe-feature-strip>div{padding:18px;border:1px solid #e4e9df;border-radius:16px;background:#fff;display:grid;gap:4px;font-size:1.2rem}.recipe-feature-strip small{font-size:.85rem;color:#738071;margin-left:30px}
+.recipe-pack-section,.recipe-library{margin:42px 0}.recipe-pack-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}.recipe-pack-card{border:1px solid #e4e9df;border-radius:18px;padding:18px;background:#fff;display:flex;flex-direction:column;align-items:flex-start;gap:9px;transition:transform .2s,box-shadow .2s}.recipe-pack-card:hover,.recipe-card:hover{transform:translateY(-5px);box-shadow:0 14px 34px #173c2515}.recipe-pack-emoji{font-size:36px;background:#f2f6ed;border-radius:14px;width:58px;height:58px;display:grid;place-items:center}.recipe-pack-card h3{font-size:1rem;margin:2px 0}.recipe-pack-card p{font-size:.86rem;color:#667363;line-height:1.5;flex:1}.recipe-pack-card .primary-button{font-size:.78rem;padding:10px 12px;width:100%}
+.recipe-tools{display:flex;gap:12px;margin:18px 0 22px}.recipe-tools input{flex:1;min-width:0}.recipe-tools input,.recipe-tools select,.assistant-input-row input{border:1px solid #dce4d9;border-radius:12px;padding:13px 15px;background:#fff;font:inherit}
+.recipe-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px}.recipe-card{border:1px solid #e4e9df;border-radius:20px;overflow:hidden;background:#fff;transition:transform .2s,box-shadow .2s}.recipe-card-art{height:155px;display:grid;place-items:center;position:relative;background:radial-gradient(circle at 50% 45%,#fff7df,#e6f0df 70%,#d7e8d1)}.recipe-card-art span{font-size:82px;filter:drop-shadow(0 8px 8px #5c653522);transition:transform .25s}.recipe-card:hover .recipe-card-art span{transform:scale(1.12) rotate(-5deg)}.recipe-card-art small{position:absolute;top:12px;left:12px;background:#ffffffd9;border-radius:99px;padding:6px 10px;font-size:.72rem}.recipe-card-body{padding:16px}.recipe-meta{display:flex;justify-content:space-between;color:#6d7b6c;font-size:.76rem}.recipe-card h3{margin:10px 0 6px;font-size:1.12rem}.recipe-card p{color:#6b7769;font-size:.87rem;line-height:1.5;min-height:52px}.try-button{width:100%;display:flex;justify-content:space-between;align-items:center;border:0;border-radius:12px;padding:12px 14px;background:#1c5638;color:white;font-weight:800;letter-spacing:.08em;cursor:pointer}.try-button span{font-size:1.2rem}.recipe-modal-backdrop{position:fixed;inset:0;background:#102317a8;z-index:1200;display:grid;place-items:center;padding:20px;animation:fadeIn .2s ease}.recipe-detail-modal{width:min(980px,100%);max-height:90vh;overflow:auto;border-radius:22px;background:#fff;position:relative;box-shadow:0 24px 80px #0004;animation:modalUp .25s ease}.recipe-detail-banner{display:flex;align-items:center;gap:22px;padding:30px;background:linear-gradient(120deg,#edf5e8,#fff5df)}.recipe-detail-banner>span{font-size:86px}.recipe-detail-banner h2{font-size:2rem;margin:6px 0}.recipe-detail-banner p{color:#62715f;margin:0}.recipe-detail-content{display:grid;grid-template-columns:1fr 1.2fr;gap:30px;padding:28px}.recipe-detail-content h3{margin:0 0 16px}.recipe-ingredient{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #edf0eb;font-size:.92rem}.recipe-ingredient b{color:#526b50}.recipe-add-all{width:100%;margin-top:18px}.recipe-steps{padding-left:22px}.recipe-steps li{padding:0 0 16px 5px;color:#1d5638}.recipe-steps li span{display:block;color:#526052;line-height:1.55;margin-top:4px}.recipe-detail-modal .modal-close{position:sticky;top:12px;float:right;margin:12px 12px -50px 0;z-index:2}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes modalUp{from{opacity:0;transform:translateY(14px) scale(.98)}to{opacity:1;transform:none}}
+.assistant-page{max-width:900px}.assistant-hero{text-align:center;padding:34px 20px 26px;background:radial-gradient(ellipse at 50% 20%,#e9f5e6,transparent 65%)}.assistant-orb{width:112px;height:112px;border-radius:36px;background:linear-gradient(145deg,#1c593a,#80b66d);margin:0 auto 20px;display:grid;place-items:center;position:relative;box-shadow:0 16px 36px #1c593a35;animation:assistantBob 3.2s ease-in-out infinite}.assistant-orb span{font-size:58px}.assistant-orb i,.assistant-orb b{position:absolute;color:#fff;font-style:normal}.assistant-orb i{right:-8px;top:4px;font-size:26px}.assistant-orb b{left:-10px;bottom:2px;font-size:20px}@keyframes assistantBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+.assistant-hero h1{font-size:clamp(2.4rem,5vw,3.7rem);color:#1c5638;margin:8px 0}.assistant-hero p{max-width:640px;margin:0 auto;color:#667363;line-height:1.65}.assistant-capabilities{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin:20px 0}.assistant-capabilities span{padding:8px 12px;border-radius:99px;background:#f0f5ec;color:#36583d;font-size:.85rem}
+.assistant-chat{border:1px solid #e1e9dd;border-radius:22px;overflow:hidden;background:#fff;box-shadow:0 14px 40px #1b3d2510}.assistant-chat-head{display:flex;align-items:center;gap:12px;padding:16px 20px;background:#174b32;color:#fff}.assistant-avatar{width:42px;height:42px;border-radius:14px;background:#ffffff20;display:grid;place-items:center;font-size:25px}.assistant-chat-head small{display:block;color:#cfe1d0;font-size:.78rem;margin-top:3px}.assistant-chat-head small i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#8ce0a0;margin-right:6px}.assistant-messages{padding:22px;min-height:260px;max-height:420px;overflow:auto;background:linear-gradient(#fbfdf9,#fff)}.assistant-message{display:flex;align-items:flex-start;gap:9px;margin:0 0 16px;max-width:86%}.assistant-message>span{font-size:22px}.assistant-message p{margin:0;padding:12px 15px;border-radius:4px 16px 16px;background:#eff5eb;color:#344b36;line-height:1.55}.assistant-message.user{margin-left:auto;justify-content:flex-end}.assistant-message.user p{background:#1e5a3a;color:#fff;border-radius:16px 4px 16px 16px}.assistant-suggestions{display:flex;gap:8px;flex-wrap:wrap;padding:0 18px 16px}.assistant-suggestions button{border:1px solid #d9e5d4;background:#fff;border-radius:99px;padding:8px 12px;color:#416144;cursor:pointer;font-size:.8rem}.assistant-input-row{display:flex;gap:10px;padding:16px;border-top:1px solid #edf0eb}.assistant-input-row input{flex:1;min-width:0}.assistant-note{text-align:center;color:#899286;font-size:.76rem;padding:0 20px 16px}
+@media(max-width:900px){.recipe-pack-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.recipe-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.recipe-hero{padding:32px}.recipe-hero-art{width:200px}.recipe-hero-art span{font-size:115px}}
+@media(max-width:600px){.recipe-page,.assistant-page{padding:18px 14px 50px}.recipe-hero{padding:28px 22px;min-height:0}.recipe-hero-art{display:none}.recipe-feature-strip{grid-template-columns:1fr;gap:8px;margin-bottom:28px}.recipe-pack-grid{grid-template-columns:1fr 1fr;gap:9px}.recipe-pack-card{padding:12px}.recipe-pack-card .primary-button{font-size:.7rem}.recipe-grid{grid-template-columns:1fr 1fr;gap:10px}.recipe-card-art{height:115px}.recipe-card-art span{font-size:60px}.recipe-card-body{padding:11px}.recipe-card h3{font-size:.96rem}.recipe-card p{font-size:.78rem;min-height:62px}.recipe-meta{font-size:.67rem}.recipe-tools{flex-direction:column}.recipe-detail-content{grid-template-columns:1fr;padding:20px}.recipe-detail-banner{padding:24px 18px;gap:12px}.recipe-detail-banner>span{font-size:58px}.recipe-detail-banner h2{font-size:1.45rem}.assistant-input-row{padding:10px}.assistant-suggestions{padding:0 10px 12px}.assistant-message{max-width:96%}}
+
 }`}</style>
     <div className="app-shell">
       {!supabaseReady && <div className="top-strip">Setup required: configure Supabase environment variables before accepting live orders.</div>}
@@ -378,6 +501,8 @@ export default function App() {
         <input className="search-box" placeholder="⌕  Search rice, oil, snacks and more..." value={search}
           onChange={e => { setSearch(e.target.value); setView("shop"); }} />
         <div className="header-actions">
+          <button onClick={() => setView("recipes")}>📖 Recipe Book</button>
+          <button onClick={() => setView("assistant")}>✨ Ask Dukandar</button>
           <button onClick={() => { setView("admin"); setAdmin(false); }}>♙ Admin</button>
           <button className="cart-button" onClick={() => setCheckout(true)}>🛒 Cart <b>{totalCartCount}</b></button>
         </div>
@@ -418,6 +543,27 @@ export default function App() {
           <form onSubmit={addCustomItem}><input value={customItem} onChange={e => setCustomItem(e.target.value)} placeholder="Enter item name..." required /><input aria-label="Quantity" type="number" min="1" step="1" value={customQty} onChange={e => setCustomQty(e.target.value)} style={{maxWidth:110}} /><button className="primary-button">Add to cart</button></form>
         </section>
         {customItems.length > 0 && <p className="custom-added">Requested: {customItems.map(item => `${item.name} × ${item.quantity}`).join(", ")} <button onClick={() => setCustomItems([])}>Clear</button></p>}
+      </main>}
+
+
+      {view === "recipes" && <main className="recipe-page">
+        <section className="recipe-hero">
+          <div><span className="eyebrow">BALAJI HOME NEEDS · KITCHEN COMPANION</span><h1>Recipe Book</h1><p>Discover something delicious, learn step by step, and add the ingredients to your grocery request in one tap.</p><button className="primary-button" onClick={() => document.getElementById("recipe-library")?.scrollIntoView({behavior:"smooth"})}>Explore recipes ↓</button></div>
+          <div className="recipe-hero-art" aria-hidden="true"><span>🍲</span><i>🥕</i><b>🥬</b><em>🌶️</em></div>
+        </section>
+        <section className="recipe-feature-strip"><div>🍽️ <b>Everyday recipes</b><small>Breakfast to dinner</small></div><div>⏱️ <b>Cooking time</b><small>Quick ideas and family meals</small></div><div>🛒 <b>Shop ingredients</b><small>Send the list to your cart</small></div></section>
+        <section className="recipe-pack-section"><div className="section-heading"><div><span className="eyebrow">CURATED FOR YOUR KITCHEN</span><h2>Recommended food packages</h2></div></div><div className="recipe-pack-grid">{recipePackages.map(pack => <article className="recipe-pack-card" key={pack.id}><div className="recipe-pack-emoji">{pack.emoji}</div><h3>{pack.title}</h3><p>{pack.description}</p><button className="primary-button" onClick={() => addPackageToCart(pack)}>＋ Add package ingredients</button></article>)}</div></section>
+        <section id="recipe-library" className="recipe-library"><div className="section-heading"><div><span className="eyebrow">FIND YOUR NEXT FAVOURITE</span><h2>Explore the recipe collection</h2></div><span>{recipeBook.length} recipes</span></div>
+          <div className="recipe-tools"><input value={recipeSearch} onChange={e=>setRecipeSearch(e.target.value)} placeholder="Search dishes or ingredients..." /><select value={recipeCategory} onChange={e=>setRecipeCategory(e.target.value)}><option>All</option>{["Breakfast","Lunch & Dinner","Snacks","Sweets"].map(c=><option key={c}>{c}</option>)}</select></div>
+          <div className="recipe-grid">{recipeBook.filter(r=>(recipeCategory==="All"||r.category===recipeCategory)&&(`${r.title} ${r.ingredients.map(i=>i.name).join(" ")}`).toLowerCase().includes(recipeSearch.toLowerCase())).map(recipe=><article className="recipe-card" key={recipe.id}><div className="recipe-card-art"><span>{recipe.emoji}</span><small>{recipe.category}</small></div><div className="recipe-card-body"><div className="recipe-meta"><span>⏱ {recipe.time}</span><span>{recipe.difficulty}</span></div><h3>{recipe.title}</h3><p>{recipe.description}</p><button className="try-button" onClick={()=>setActiveRecipe(recipe)}>TRY ME <span>→</span></button></div></article>)}</div>
+          {!recipeBook.filter(r=>(recipeCategory==="All"||r.category===recipeCategory)&&(`${r.title} ${r.ingredients.map(i=>i.name).join(" ")}`).toLowerCase().includes(recipeSearch.toLowerCase())).length&&<p className="empty">No recipes match that search. Try another dish or ingredient.</p>}
+        </section>
+        {activeRecipe && <div className="recipe-modal-backdrop" role="dialog" aria-modal="true" onClick={()=>setActiveRecipe(null)}><article className="recipe-detail-modal" onClick={e=>e.stopPropagation()}><button className="modal-close" onClick={()=>setActiveRecipe(null)}>✕</button><div className="recipe-detail-banner"><span>{activeRecipe.emoji}</span><div><small>{activeRecipe.category} · {activeRecipe.time}</small><h2>{activeRecipe.title}</h2><p>{activeRecipe.description}</p></div></div><div className="recipe-detail-content"><div><h3>Ingredients · Serves {activeRecipe.servings}</h3>{activeRecipe.ingredients.map(item=><div className="recipe-ingredient" key={item.name}><span>{item.name}</span><b>{item.quantity} {item.unit}</b></div>)}<button className="primary-button recipe-add-all" onClick={()=>addRecipeToCart(activeRecipe)}>＋ Add all ingredients to cart</button></div><div><h3>Let's cook</h3><ol className="recipe-steps">{activeRecipe.steps.map((step,i)=><li key={i}><b>Step {i+1}</b><span>{step}</span></li>)}</ol><button className="back-button" onClick={()=>{setActiveRecipe(null);setView("assistant");setAssistantInput(`Help me cook ${activeRecipe.title}`);}}>Ask Dukandar about this recipe ↗</button></div></div></article></div>}
+      </main>}
+
+      {view === "assistant" && <main className="assistant-page">
+        <section className="assistant-hero"><div className="assistant-orb"><span>🧑‍🍳</span><i>✦</i><b>✧</b></div><span className="eyebrow">YOUR FRIENDLY KITCHEN & GROCERY GUIDE</span><h1>Ask Dukandar</h1><p>Tell me what you want to cook, what you need from the store, or which recipe you would like to try.</p><div className="assistant-capabilities"><span>🍲 Recipe ideas</span><span>🛍️ Product finder</span><span>🥕 Ingredient help</span></div></section>
+        <section className="assistant-chat"><div className="assistant-chat-head"><div className="assistant-avatar">🧑‍🍳</div><div><b>Ask Dukandar</b><small><i></i> Ready to help</small></div></div><div className="assistant-messages">{assistantMessages.map((message,index)=><div key={index} className={`assistant-message ${message.role}`}>{message.role==="assistant"&&<span>🧑‍🍳</span>}<p>{message.text}</p></div>)}</div><div className="assistant-suggestions">{["Suggest breakfast recipes","What do I need for biryani?","Find rice in the store","Show me quick snacks"].map(q=><button key={q} onClick={()=>setAssistantInput(q)}>{q}</button>)}</div><form className="assistant-input-row" onSubmit={sendAssistantMessage}><input value={assistantInput} onChange={e=>setAssistantInput(e.target.value)} placeholder="Ask Dukandar anything..." /><button className="primary-button" type="submit">Send ↑</button></form><p className="assistant-note">Ask Dukandar currently uses the store catalogue and curated recipe knowledge. Live AI-generated answers require a secure server-side AI connection.</p></section>
       </main>}
 
       {view === "admin" && <main className="admin-page">
