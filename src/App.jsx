@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
+import "./RecipeBookDukandar.css";
 import { supabase, supabaseReady, ADMIN_EMAIL, STORE_WHATSAPP } from "../supabase";
 
 const categories = [
@@ -129,10 +130,45 @@ const productPhotoUrl = product => {
 const heroPhotoUrl = "/kirana-hero.png";
 const statuses = ["Order Received", "Estimate Sent", "Customer Confirmed", "Preparing", "Out for Delivery", "Delivered", "Cancelled"];
 const recipeBook = [
-  { id:"sambar", name:"South Indian Sambar", cuisine:"South Indian", servings:4, ingredients:[["Toor Dal","1 cup (200 g)","500 g"],["Turmeric Powder","½ tsp","100 g"],["Sambar Powder","2 tbsp","100 g"],["Tomatoes","2 medium","1 kg"],["Onion","1 medium","1 kg"]] },
-  { id:"lemon-rice", name:"Lemon Rice", cuisine:"South Indian", servings:4, ingredients:[["Sona Masoori Rice","2 cups (400 g)","1 kg"],["Peanuts","2 tbsp (25 g)","250 g"],["Turmeric Powder","½ tsp","100 g"],["Mustard Seeds","1 tsp","100 g"]] },
-  { id:"pongal", name:"Ven Pongal", cuisine:"South Indian", servings:4, ingredients:[["Sona Masoori Rice","1 cup (200 g)","1 kg"],["Moong Dal","½ cup (100 g)","500 g"],["Cumin Seeds","1 tsp","100 g"],["Cow Ghee","2 tbsp","500 ml"]] },
-  { id:"chana", name:"Chana Masala", cuisine:"North Indian", servings:4, ingredients:[["Kabuli Chana","1 cup (200 g)","500 g"],["Onion","2 medium","1 kg"],["Tomatoes","2 medium","1 kg"],["Garam Masala","1 tsp","100 g"],["Coriander Powder","1 tbsp","200 g"]] }
+  {id:"veg-biryani",name:"Vegetable Biryani",cuisine:"Indian",category:"Indian favourites",time:"45 min",difficulty:"Medium",servings:4,emoji:"🍲",description:"Fragrant basmati rice layered with vegetables, herbs and warming spices.",ingredients:[["Basmati Rice","2 cups","1 kg"],["Onion","2 medium","1 kg"],["Tomatoes","2 medium","1 kg"],["Carrot","1 cup","1 kg"],["Green Chilli","2 pieces","250 g"],["Curd","½ cup","500 g"],["Coriander Leaves","1 bunch","Bunch"],["Garam Masala","2 tsp","100 g"]],steps:["Wash and soak the basmati rice for 20 minutes.","Slice onions and chop the vegetables.","Cook onions, tomatoes, vegetables and spices until fragrant.","Add curd, herbs, rice and water.","Cover and cook until the rice is tender. Rest before serving."]},
+  {id:"idli",name:"Soft Idli",cuisine:"Indian",category:"Breakfast",time:"25 min + fermentation",difficulty:"Easy",servings:4,emoji:"🥥",description:"Soft steamed rice cakes served with chutney or sambar.",ingredients:[["Urad Dal","1 cup","500 g"],["Sona Masoori Rice","3 cups","1 kg"],["Iodised Salt","1 tsp","1 kg"]],steps:["Soak rice and urad dal separately for 4–6 hours.","Grind to a smooth batter and mix with salt.","Ferment overnight in a warm place.","Pour into greased idli moulds and steam for 10–12 minutes."]},
+  {id:"andhra-sambar",name:"Andhra Sambar",cuisine:"Indian",category:"Indian favourites",time:"35 min",difficulty:"Easy",servings:4,emoji:"🥣",description:"Tangy lentils simmered with vegetables and aromatic spices.",ingredients:[["Toor Dal","1 cup","1 kg"],["Tomatoes","2 pieces","1 kg"],["Onion","1 medium","1 kg"],["Carrot","1 piece","1 kg"],["Sambar Powder","2 tbsp","100 g"],["Turmeric Powder","½ tsp","100 g"],["Mustard Seeds","1 tsp","100 g"]],steps:["Pressure-cook dal with turmeric until soft.","Cook chopped vegetables and onion until tender.","Add sambar powder and simmer.","Stir in mashed dal and finish with a mustard-seed tempering."]},
+  {id:"masala-dosa",name:"Masala Dosa",cuisine:"Indian",category:"Breakfast",time:"30 min + batter",difficulty:"Medium",servings:4,emoji:"🥞",description:"Crisp golden dosa with a comforting potato filling.",ingredients:[["Sona Masoori Rice","3 cups","1 kg"],["Urad Dal","1 cup","500 g"],["Potato","4 medium","1 kg"],["Onion","1 medium","1 kg"],["Mustard Seeds","1 tsp","100 g"],["Sunflower Oil","2 tbsp","1 L"]],steps:["Prepare and ferment rice-and-dal batter.","Boil and mash potatoes; sauté with onion and mustard seeds.","Spread batter thinly on a hot pan.","Cook until crisp, add potato masala and fold."]},
+  {id:"poha",name:"Vegetable Poha",cuisine:"Indian",category:"Breakfast",time:"20 min",difficulty:"Easy",servings:2,emoji:"🍋",description:"A quick, light breakfast with flattened rice, peanuts and vegetables.",ingredients:[["Poha","2 cups","500 g"],["Onion","1 piece","1 kg"],["Peanuts","¼ cup","250 g"],["Green Chilli","1 piece","250 g"],["Turmeric Powder","½ tsp","100 g"]],steps:["Rinse poha briefly and drain.","Sauté onion, chilli and peanuts.","Add turmeric and poha; toss gently until warm.","Finish with lemon and coriander if available."]},
+  {id:"chole",name:"Punjabi Chole",cuisine:"Indian",category:"Indian favourites",time:"50 min",difficulty:"Medium",servings:4,emoji:"🫘",description:"Chickpeas in a rich, tangy North Indian masala.",ingredients:[["Kabuli Chana","1 cup","500 g"],["Onion","2 medium","1 kg"],["Tomatoes","2 medium","1 kg"],["Garam Masala","1 tsp","100 g"],["Coriander Powder","1 tbsp","200 g"]],steps:["Soak chickpeas overnight and pressure-cook until tender.","Cook onion and tomato with spices.","Add chickpeas and some cooking water.","Simmer until thick and serve hot."]},
+  {id:"paneer-butter",name:"Paneer Butter Masala",cuisine:"Indian",category:"Indian favourites",time:"35 min",difficulty:"Medium",servings:4,emoji:"🧀",description:"Paneer cubes in a creamy tomato and butter gravy.",ingredients:[["Paneer","250 g","200 g"],["Tomatoes","4 medium","1 kg"],["Onion","1 medium","1 kg"],["Butter","2 tbsp","Pack"],["Garam Masala","1 tsp","100 g"]],steps:["Cook tomatoes and onion until soft, then blend.","Simmer the sauce with butter and spices.","Add paneer cubes and a little water or cream.","Cook gently for 5 minutes and serve."]},
+  {id:"lemon-rice",name:"Lemon Rice",cuisine:"Indian",category:"Quick meals",time:"20 min",difficulty:"Easy",servings:3,emoji:"🍋",description:"Bright lemon rice with peanuts and a fragrant tempering.",ingredients:[["Sona Masoori Rice","2 cups","1 kg"],["Peanuts","2 tbsp","250 g"],["Turmeric Powder","½ tsp","100 g"],["Mustard Seeds","1 tsp","100 g"]],steps:["Cook rice and let it cool slightly.","Temper mustard seeds and peanuts in oil.","Add turmeric and cooked rice.","Switch off the heat and mix in lemon juice and salt."]},
+  {id:"rajma",name:"Rajma Masala",cuisine:"Indian",category:"Indian favourites",time:"55 min",difficulty:"Medium",servings:4,emoji:"🍛",description:"Kidney beans simmered in a homestyle tomato gravy.",ingredients:[["Rajma","1 cup","500 g"],["Onion","2 medium","1 kg"],["Tomatoes","3 medium","1 kg"],["Garam Masala","1 tsp","100 g"]],steps:["Soak rajma overnight and pressure-cook until soft.","Prepare onion-tomato masala.","Add rajma and cooking liquid.","Simmer until creamy and serve with rice."]},
+  {id:"pasta",name:"Creamy Tomato Pasta",cuisine:"Italian",category:"World kitchen",time:"25 min",difficulty:"Easy",servings:2,emoji:"🍝",description:"Comforting pasta tossed in a creamy tomato sauce.",ingredients:[["Pasta","200 g","Pack"],["Tomatoes","3 medium","1 kg"],["Fresh Milk","½ cup","500 ml"],["Butter","1 tbsp","Pack"]],steps:["Boil pasta until just tender and reserve some pasta water.","Cook chopped tomatoes in butter until soft.","Add milk and simmer gently.","Toss pasta through the sauce and serve."]},
+  {id:"fried-rice",name:"Vegetable Fried Rice",cuisine:"Chinese",category:"World kitchen",time:"20 min",difficulty:"Easy",servings:3,emoji:"🥡",description:"Quick wok-style rice with crunchy vegetables.",ingredients:[["Basmati Rice","2 cups","1 kg"],["Carrot","½ cup","1 kg"],["Onion","1 medium","1 kg"],["Green Chilli","1 piece","250 g"]],steps:["Cook rice and cool completely.","Stir-fry chopped vegetables on high heat.","Add rice and season to taste.","Toss well and serve hot."]},
+  {id:"pancakes",name:"Fluffy Pancakes",cuisine:"American",category:"World kitchen",time:"20 min",difficulty:"Easy",servings:3,emoji:"🥞",description:"Soft breakfast pancakes with a golden outside.",ingredients:[["Wheat Atta","1 cup","1 kg"],["Fresh Milk","¾ cup","500 ml"],["Sugar","2 tbsp","1 kg"],["Butter","2 tbsp","Pack"]],steps:["Mix flour, sugar and milk into a smooth batter.","Rest for 5 minutes.","Pour small portions onto a lightly buttered pan.","Flip when bubbles appear and cook until golden."]},
+  {id:"mexican-beans",name:"Mexican-Style Bean Bowl",cuisine:"Mexican",category:"World kitchen",time:"25 min",difficulty:"Easy",servings:2,emoji:"🌮",description:"A colourful bowl with spiced beans, rice and fresh toppings.",ingredients:[["Rajma","1 cup","500 g"],["Basmati Rice","1 cup","1 kg"],["Tomatoes","2 medium","1 kg"],["Onion","1 medium","1 kg"]],steps:["Cook rice and keep warm.","Cook beans until tender.","Sauté onion and tomatoes with spices, then add beans.","Serve beans over rice with fresh toppings."]},
+  {id:"greek-salad",name:"Greek-Style Salad",cuisine:"Mediterranean",category:"World kitchen",time:"15 min",difficulty:"Easy",servings:2,emoji:"🥗",description:"A fresh crunchy salad with tomato, onion and a simple dressing.",ingredients:[["Tomatoes","2 medium","1 kg"],["Onion","½ medium","1 kg"],["Cucumber","1 medium","1 kg"],["Olive Oil","1 tbsp","Bottle"]],steps:["Chop tomatoes, cucumber and onion.","Whisk olive oil with lemon, salt and pepper.","Toss gently and serve chilled."]},
+  {id:"thai-curry",name:"Thai-Inspired Coconut Curry",cuisine:"Thai",category:"World kitchen",time:"30 min",difficulty:"Medium",servings:3,emoji:"🥥",description:"A fragrant coconut curry with vegetables and a gentle chilli warmth.",ingredients:[["Coconut Milk","1 can","Pack"],["Carrot","1 cup","1 kg"],["Onion","1 medium","1 kg"],["Green Chilli","1 piece","250 g"],["Rice","2 cups","1 kg"]],steps:["Cook rice separately.","Sauté onion and vegetables.","Add coconut milk and curry seasoning.","Simmer until vegetables are tender and serve with rice."]},
+  {id:"chocolate-cookies",name:"Chocolate Chip Cookies",cuisine:"American",category:"Desserts",time:"30 min",difficulty:"Easy",servings:12,emoji:"🍪",description:"Simple home-baked cookies with crisp edges and soft centres.",ingredients:[["Wheat Atta","1½ cups","1 kg"],["Sugar","½ cup","1 kg"],["Butter","½ cup","Pack"],["Milk Chocolate","½ cup","Pack"]],steps:["Cream butter and sugar.","Mix in flour and chopped chocolate.","Shape into small balls and flatten slightly.","Bake at 180°C until the edges turn golden."]}
+
+  ,{id:"gujarati-khichdi",name:"Gujarati Khichdi",cuisine:"Indian",category:"Indian favourites",time:"30 min",difficulty:"Easy",servings:3,emoji:"🍚",description:"A gentle one-pot rice and lentil comfort meal.",ingredients:[["Sona Masoori Rice","1 cup","1 kg"],["Moong Dal","½ cup","1 kg"],["Turmeric Powder","½ tsp","100 g"],["Cow Ghee","1 tbsp","500 ml"]],steps:["Rinse rice and dal together.","Pressure-cook with water, turmeric and salt until soft.","Finish with a spoon of ghee and serve warm."]}
+  ,{id:"maharashtrian-misal",name:"Maharashtrian Misal",cuisine:"Indian",category:"Indian favourites",time:"40 min",difficulty:"Medium",servings:4,emoji:"🥘",description:"A spicy sprouted-bean curry served with crunchy toppings.",ingredients:[["Moong Dal","1 cup sprouts","1 kg"],["Onion","2 medium","1 kg"],["Tomatoes","2 medium","1 kg"],["Garam Masala","2 tsp","100 g"]],steps:["Cook sprouted beans until tender.","Prepare a spicy onion and tomato masala.","Simmer beans in the masala and serve with crunchy toppings."]}
+  ,{id:"bengali-aloo-dum",name:"Bengali Aloo Dum",cuisine:"Indian",category:"Indian favourites",time:"35 min",difficulty:"Medium",servings:4,emoji:"🥔",description:"Baby potatoes simmered in a fragrant Bengali-style gravy.",ingredients:[["Potato","500 g","1 kg"],["Tomatoes","2 medium","1 kg"],["Garam Masala","1 tsp","100 g"],["Mustard Seeds","½ tsp","100 g"]],steps:["Boil potatoes until just tender.","Prepare tomato gravy with spices.","Add potatoes and simmer until coated and flavourful."]}
+  ,{id:"kashmiri-pulao",name:"Kashmiri Pulao",cuisine:"Indian",category:"Indian favourites",time:"35 min",difficulty:"Medium",servings:4,emoji:"🍛",description:"A fragrant rice dish with nuts, fruit and gentle spices.",ingredients:[["Basmati Rice","2 cups","1 kg"],["Cashew Nuts","¼ cup","250 g"],["Raisins","2 tbsp","250 g"],["Cow Ghee","2 tbsp","500 ml"]],steps:["Rinse and soak rice.","Toast nuts and raisins in ghee and set aside.","Cook rice with whole spices until fluffy.","Top with toasted nuts and raisins."]}
+  ,{id:"rajasthani-dal-baati",name:"Rajasthani Dal Baati",cuisine:"Indian",category:"Indian favourites",time:"60 min",difficulty:"Medium",servings:4,emoji:"🫓",description:"Baked wheat baati served with hearty lentils and ghee.",ingredients:[["Wheat Atta","2 cups","1 kg"],["Toor Dal","½ cup","1 kg"],["Moong Dal","½ cup","1 kg"],["Cow Ghee","3 tbsp","500 ml"]],steps:["Knead a firm dough and shape into balls.","Bake until golden and cooked through.","Cook mixed dals with spices until creamy.","Crack baati, drizzle with ghee and serve with dal."]}
+  ,{id:"kerala-avial",name:"Kerala Avial",cuisine:"Indian",category:"Indian favourites",time:"35 min",difficulty:"Easy",servings:4,emoji:"🥥",description:"Mixed vegetables in a coconut and yoghurt sauce.",ingredients:[["Carrot","1 cup","1 kg"],["Curd","½ cup","500 g"],["Coconut Oil","1 tbsp","500 ml"],["Green Chilli","2 pieces","250 g"]],steps:["Cut vegetables into even batons.","Cook with a little water until just tender.","Mix coconut paste and yoghurt through gently.","Finish with coconut oil and curry leaves."]}
+  ,{id:"hyderabadi-haleem",name:"Hyderabadi Haleem",cuisine:"Indian",category:"Indian favourites",time:"90 min",difficulty:"Advanced",servings:4,emoji:"🍲",description:"A slow-cooked, richly spiced grain and lentil preparation.",ingredients:[["Wheat Atta","¼ cup","1 kg"],["Toor Dal","¼ cup","1 kg"],["Moong Dal","¼ cup","1 kg"],["Garam Masala","2 tsp","100 g"],["Onion","2 medium","1 kg"]],steps:["Cook grains and lentils until very soft.","Cook the chosen protein separately with spices, if using.","Combine and mash or blend to a thick consistency.","Simmer slowly and garnish with browned onions."]}
+  ,{id:"mumbai-pav-bhaji",name:"Mumbai Pav Bhaji",cuisine:"Indian",category:"Indian favourites",time:"40 min",difficulty:"Easy",servings:4,emoji:"🍞",description:"Mashed spiced vegetables served with buttery toasted pav.",ingredients:[["Potato","3 medium","1 kg"],["Tomatoes","3 medium","1 kg"],["Onion","2 medium","1 kg"],["Butter","2 tbsp","Pack"],["Bread","8 pieces","Pack"]],steps:["Boil potatoes and vegetables until soft.","Cook onion and tomato with pav bhaji masala.","Mash vegetables into the masala and simmer.","Toast bread with butter and serve alongside."]}
+  ,{id:"japanese-vegetable-ramen",name:"Japanese Vegetable Ramen",cuisine:"Japanese",category:"World kitchen",time:"30 min",difficulty:"Easy",servings:2,emoji:"🍜",description:"A warming noodle bowl with vegetables and savoury broth.",ingredients:[["Noodles","2 portions","Pack"],["Carrot","1 piece","1 kg"],["Onion","½ piece","1 kg"],["Mushrooms","1 cup","Pack"]],steps:["Prepare noodles according to the packet.","Simmer vegetables in a seasoned broth.","Add noodles to bowls and pour over hot broth.","Finish with spring onion or sesame if available."]}
+  ,{id:"korean-veg-bibimbap",name:"Korean Vegetable Bibimbap",cuisine:"Korean",category:"World kitchen",time:"35 min",difficulty:"Medium",servings:2,emoji:"🍚",description:"Rice bowls topped with colourful vegetables and a spicy-sweet sauce.",ingredients:[["Basmati Rice","1 cup","1 kg"],["Carrot","1 piece","1 kg"],["Cucumber","½ piece","1 kg"],["Green Chilli","1 piece","250 g"]],steps:["Cook rice and keep warm.","Slice and quickly sauté or arrange vegetables.","Place vegetables over rice.","Serve with a chilli, soy and sesame-style dressing."]}
+  ,{id:"french-ratatouille",name:"French Ratatouille",cuisine:"French",category:"World kitchen",time:"45 min",difficulty:"Medium",servings:4,emoji:"🍆",description:"A colourful slow-simmered vegetable dish with herbs.",ingredients:[["Tomatoes","3 medium","1 kg"],["Onion","1 medium","1 kg"],["Carrot","1 piece","1 kg"],["Olive Oil","2 tbsp","Bottle"]],steps:["Slice vegetables evenly.","Soften onion in olive oil.","Add vegetables and herbs.","Cover and simmer until tender but not mushy."]}
+  ,{id:"spanish-vegetable-paella",name:"Spanish Vegetable Paella",cuisine:"Spanish",category:"World kitchen",time:"40 min",difficulty:"Medium",servings:4,emoji:"🥘",description:"A colourful one-pan rice dish with vegetables and paprika.",ingredients:[["Basmati Rice","1½ cups","1 kg"],["Tomatoes","2 medium","1 kg"],["Green Peas","½ cup","Pack"],["Onion","1 medium","1 kg"]],steps:["Sauté onion and vegetables in a wide pan.","Stir in rice and paprika.","Add warm stock and simmer without stirring much.","Rest briefly before serving."]}
+  ,{id:"turkish-lentil-soup",name:"Turkish Red Lentil Soup",cuisine:"Turkish",category:"World kitchen",time:"30 min",difficulty:"Easy",servings:4,emoji:"🥣",description:"A smooth, comforting red lentil soup with lemon.",ingredients:[["Masoor Dal","1 cup","1 kg"],["Onion","1 medium","1 kg"],["Carrot","1 piece","1 kg"],["Turmeric Powder","½ tsp","100 g"]],steps:["Rinse lentils.","Cook onion, carrot and lentils with water until soft.","Blend until smooth.","Season and serve with lemon."]}
+  ,{id:"middle-eastern-falafel",name:"Middle Eastern Falafel",cuisine:"Middle Eastern",category:"World kitchen",time:"40 min + soaking",difficulty:"Medium",servings:4,emoji:"🧆",description:"Crisp chickpea patties with herbs and warm spices.",ingredients:[["Kabuli Chana","1 cup","500 g"],["Onion","½ medium","1 kg"],["Coriander Leaves","1 bunch","Bunch"],["Cumin Seeds","1 tsp","100 g"]],steps:["Soak chickpeas overnight and drain well.","Pulse with onion, herbs and spices to a coarse mixture.","Shape into small patties.","Fry or bake until crisp and cooked through."]}
+  ,{id:"indonesian-nasi-goreng",name:"Indonesian Nasi Goreng",cuisine:"Indonesian",category:"World kitchen",time:"20 min",difficulty:"Easy",servings:2,emoji:"🍳",description:"A quick fried rice with a sweet-savoury seasoning.",ingredients:[["Basmati Rice","2 cups cooked","1 kg"],["Onion","1 medium","1 kg"],["Carrot","½ cup","1 kg"],["Green Chilli","1 piece","250 g"]],steps:["Use cooled cooked rice.","Sauté onion and vegetables.","Add rice and a sweet-savoury sauce.","Toss over high heat and serve hot."]}
+  ,{id:"british-vegetable-pie",name:"British Vegetable Pie",cuisine:"British",category:"World kitchen",time:"55 min",difficulty:"Medium",servings:4,emoji:"🥧",description:"A cosy vegetable filling under a golden pastry crust.",ingredients:[["Potato","2 medium","1 kg"],["Carrot","1 piece","1 kg"],["Onion","1 medium","1 kg"],["Fresh Milk","½ cup","500 ml"],["Butter","2 tbsp","Pack"]],steps:["Cook diced vegetables until just tender.","Make a light creamy sauce with butter and milk.","Fill a baking dish and cover with pastry.","Bake until the top is golden."]}
+  ,{id:"ethiopian-lentil-stew",name:"Ethiopian Misir Wot",cuisine:"Ethiopian",category:"World kitchen",time:"40 min",difficulty:"Medium",servings:4,emoji:"🍛",description:"A warming red lentil stew with fragrant spices.",ingredients:[["Masoor Dal","1 cup","1 kg"],["Onion","2 medium","1 kg"],["Tomatoes","2 medium","1 kg"],["Red Chilli Powder","1 tsp","200 g"]],steps:["Cook onions slowly until soft.","Add tomatoes and spices.","Stir in rinsed lentils and water.","Simmer until thick and tender."]}
+  ,{id:"carrot-halwa",name:"Gajar Ka Halwa",cuisine:"Indian",category:"Desserts",time:"50 min",difficulty:"Medium",servings:4,emoji:"🥕",description:"A classic Indian carrot pudding finished with nuts.",ingredients:[["Carrot","500 g","1 kg"],["Fresh Milk","500 ml","500 ml"],["Sugar","½ cup","1 kg"],["Cow Ghee","2 tbsp","500 ml"],["Cashew Nuts","2 tbsp","250 g"]],steps:["Grate carrots.","Cook with milk until most liquid evaporates.","Add sugar and ghee and cook until glossy.","Garnish with toasted cashews."]}
+  ,{id:"mango-lassi",name:"Mango Lassi",cuisine:"Indian",category:"Desserts",time:"10 min",difficulty:"Easy",servings:2,emoji:"🥭",description:"A chilled yoghurt and mango drink.",ingredients:[["Mango","1 cup pulp","1 kg"],["Curd","1 cup","500 g"],["Sugar","1 tbsp","1 kg"]],steps:["Add mango pulp, curd and sugar to a blender.","Blend until smooth and creamy.","Chill and serve."]}
+  ,{id:"italian-margherita-pizza",name:"Margherita Pizza",cuisine:"Italian",category:"World kitchen",time:"35 min",difficulty:"Medium",servings:2,emoji:"🍕",description:"A simple tomato, cheese and basil pizza favourite.",ingredients:[["Wheat Atta","1½ cups","1 kg"],["Tomatoes","2 medium","1 kg"],["Paneer","100 g","200 g"]],steps:["Prepare or use a ready pizza base.","Spread tomato sauce over the base.","Add cheese and basil.","Bake in a hot oven until the crust is crisp."]}
+  ,{id:"thai-pad-thai",name:"Thai Vegetable Pad Thai",cuisine:"Thai",category:"World kitchen",time:"25 min",difficulty:"Medium",servings:2,emoji:"🍜",description:"Stir-fried noodles with vegetables and a tangy sauce.",ingredients:[["Noodles","2 portions","Pack"],["Peanuts","2 tbsp","250 g"],["Carrot","1 piece","1 kg"],["Onion","½ piece","1 kg"]],steps:["Soak or cook noodles as directed.","Stir-fry vegetables in a hot pan.","Add noodles and a tangy sweet-sour sauce.","Top with crushed peanuts."]}
+
 ];
 // Balaji Home Needs shop location supplied by the owner.
 const STORE_LOCATION = { latitude: 17.326766725693464, longitude: 78.52105733068217 };
@@ -185,8 +221,21 @@ export default function App() {
   const [adminTab, setAdminTab] = useState("overview");
   const [adminProductSearch, setAdminProductSearch] = useState("");
   const [dukandarQuestion, setDukandarQuestion] = useState("");
-  const [dukandarReply, setDukandarReply] = useState("Vanakkam! Tell me what you need. I can help find items in our store catalogue.");
+  const [dukandarReply, setDukandarReply] = useState("Hello! I am Dukandar. Ask me about groceries, recipes or ingredients.");
   const [dukandarOpen, setDukandarOpen] = useState(false);
+  const [pendingDukandarRecipe, setPendingDukandarRecipe] = useState(null);
+  const [activeRecipe, setActiveRecipe] = useState(null);
+  const [recipeSearch, setRecipeSearch] = useState("");
+  const [recipeCategory, setRecipeCategory] = useState("All");
+  const [recipeImportText, setRecipeImportText] = useState("");
+  const [chatMessages, setChatMessages] = useState([{role:"assistant",text:"Hello! I'm Dukandar, your Balaji Home Needs shopping assistant. Ask me about groceries, recipes or ingredients."}]);
+
+  useEffect(() => {
+    if (view !== "shop" || admin) return;
+    if (sessionStorage.getItem("balaji_dukandar_welcomed")) return;
+    const timer = setTimeout(() => { setDukandarOpen(true); sessionStorage.setItem("balaji_dukandar_welcomed", "1"); }, 1400);
+    return () => clearTimeout(timer);
+  }, [view, admin]);
 
   useEffect(() => { localStorage.setItem("balaji_products", JSON.stringify(products)); }, [products]);
   useEffect(() => { localStorage.setItem("balaji_orders", JSON.stringify(orders)); }, [orders]);
@@ -313,23 +362,102 @@ export default function App() {
         setCustomItems(old => [...old, { name, quantity: 1, purchaseUnit: pack, recipeNeed: need, quotedPrice: "" }]);
       }
     });
-    showNotice("Recipe ingredients added. Recipe measurements and shopping pack sizes are kept separate.");
+    showNotice("Recipe ingredients added. The store will confirm pack sizes and availability.");
+    setActiveRecipe(null);
+    setCheckout(true);
+  }
+  function importRecipeIngredients() {
+    const lines = recipeImportText.split(/\n|,/).map(x => x.trim()).filter(Boolean);
+    if (!lines.length) { showNotice("Paste the recipe ingredients first."); return; }
+    let added = 0;
+    lines.forEach(line => {
+      const clean = line.replace(/^[-•*\d.)\s]+/, "").trim();
+      if (!clean) return;
+      const product = products.find(p => !p.paused && (clean.toLowerCase().includes(p.name.toLowerCase()) || p.name.toLowerCase().includes(clean.toLowerCase())));
+      if (product) {
+        setCart(old => ({...old,[product.id]:Math.max(1,Number(old[product.id]||0))}));
+        setCartRecipeNeeds(old => ({...old,[product.id]:clean})); added++;
+      } else {
+        const name = clean.replace(/^([\d./½¼¾]+\s*(cups?|tbsp|tsp|g|kg|ml|litres?|pieces?|medium|large)\s+)/i, "").replace(/\s*[-–:].*$/, "").trim();
+        if (name) { setCustomItems(old => [...old,{name,quantity:1,purchaseUnit:"To be confirmed",recipeNeed:clean,quotedPrice:""}]); added++; }
+      }
+    });
+    setRecipeImportText("");
+    showNotice(`${added} ingredient requests added. Review them in your cart.`);
     setCheckout(true);
   }
   function askDukandar(e) {
     e.preventDefault();
-    const q = dukandarQuestion.trim().toLowerCase();
-    if (!q) return;
-    const found = products.filter(p => !p.paused && q.includes(p.name.toLowerCase()));
-    if (found.length) {
-      found.forEach(p => setCart(old => ({ ...old, [p.id]: Math.max(1, Number(old[p.id] || 0)) })));
-      setDukandarReply("Vanakkam! I found " + found.map(p => p.name).join(", ") + " and added the item(s) to your cart. Please review your list.");
+    const question = dukandarQuestion.trim();
+    if (!question) return;
+    const q = question.toLowerCase().replace(/[’']/g, "'");
+    const addIntent = /\b(add|put|include|send)\b/.test(q) && /\b(cart|basket|shopping list|order)\b/.test(q);
+    const yesIntent = /^(yes|yeah|yep|sure|okay|ok|please|do it|add it|add them|yes please)[.! ]*$/i.test(question);
+    const noIntent = /^(no|not now|later|no thanks)[.! ]*$/i.test(question);
+    let answer = "";
+
+    const findRecipe = (text) => {
+      const clean = text.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+      return recipeBook.find(r => {
+        const name = r.name.toLowerCase();
+        return clean.includes(name) || name.split(/\s+/).filter(w => w.length > 3).every(w => clean.includes(w));
+      });
+    };
+
+    // A customer can confirm adding the recipe after Dukandar has shown its ingredients.
+    if (yesIntent && pendingDukandarRecipe) {
+      const recipe = pendingDukandarRecipe;
+      addRecipeToCart(recipe);
+      setPendingDukandarRecipe(null);
+      answer = `Of course! I've added the ingredients for ${recipe.name} to your cart. You can review the list and send your request when you're ready.`;
+    } else if (noIntent && pendingDukandarRecipe) {
+      setPendingDukandarRecipe(null);
+      answer = "No problem! Your cart has not been changed. Would you like another recipe or help finding a grocery item?";
     } else {
-      setCustomItem(dukandarQuestion);
-      setDukandarReply("I couldn't find an exact match. I've copied your request into the item-request box for the shopkeeper to confirm.");
-      setView("shop");
-      setTimeout(() => document.getElementById("custom-request")?.scrollIntoView({ behavior:"smooth", block:"center" }), 100);
+      const recipe = findRecipe(q);
+      const recipeIntent = /\b(recipe|cook|make|prepare|ingredients|breakfast|lunch|dinner|snack|dessert|meal|dish)\b/.test(q);
+
+      if (recipe && recipeIntent) {
+        const ingredientText = recipe.ingredients.map(([name, need]) => `${name} (${need})`).join(", ");
+        if (addIntent || /\b(add|put)\s+(the\s+)?(ingredients|everything)\b/.test(q)) {
+          addRecipeToCart(recipe);
+          answer = `Done! I've added the ingredients for ${recipe.name} to your cart. You can review the items before checkout.`;
+        } else {
+          setPendingDukandarRecipe(recipe);
+          answer = `Absolutely! 😊 Here's what you'll need for ${recipe.name}: ${ingredientText}. Would you like me to add these ingredients to your cart? Just say “Yes, add them”.`;
+        }
+      } else if (recipeIntent) {
+        const suggestions = recipeBook.filter(r => /breakfast|lunch|dinner|snack|dessert/i.test(r.category || "") || /quick|world|indian/i.test(r.category || "")).slice(0, 4);
+        answer = `I'd love to help you cook! Tell me the dish name, or choose one of these ideas: ${suggestions.map(r => r.name).join(", ")}. I can show the ingredients and add them to your cart when you say so.`;
+      } else if (addIntent) {
+        const match = question.match(/\badd\s+(.+?)\s+to\s+(?:my\s+)?(?:cart|basket|shopping list|order)\b/i);
+        let requested = match?.[1]?.replace(/^(please\s+)?(the\s+)?/i, "").trim() || question;
+        requested = requested.replace(/\b(please|for me|now)\b/gi, "").trim();
+        const quantityMatch = requested.match(/^(\d+(?:\.\d+)?)\s+(.+)$/);
+        const quantity = quantityMatch ? Math.max(1, Number(quantityMatch[1])) : 1;
+        const itemName = (quantityMatch ? quantityMatch[2] : requested).trim();
+        const found = products.find(p => !p.paused && (p.name.toLowerCase() === itemName.toLowerCase() || itemName.toLowerCase().includes(p.name.toLowerCase()) || p.name.toLowerCase().includes(itemName.toLowerCase())));
+        if (found) {
+          setCart(old => ({ ...old, [found.id]: Math.max(quantity, Number(old[found.id] || 0)) }));
+          answer = `Added ${quantity} ${found.name} to your cart. Would you like anything else?`;
+        } else if (itemName) {
+          setCustomItems(old => [...old, { name: itemName, quantity, purchaseUnit: "To be confirmed", quotedPrice: "" }]);
+          answer = `I've added “${itemName}” as a special item request in your cart. It's not in our current catalogue, so our shop team will confirm availability and price. Would you like to add anything else?`;
+        } else {
+          answer = "Sure! Which item would you like me to add?";
+        }
+      } else {
+        const found = products.filter(p => !p.paused && q.includes(p.name.toLowerCase()));
+        if (found.length) {
+          answer = `I found ${found.map(p => p.name).join(", ")} in our store. Would you like me to add ${found.length === 1 ? "it" : "them"} to your cart?`;
+        } else {
+          answer = "I'm happy to help! You can ask me for a recipe, ask about a grocery item, or say “Add [item name] to my cart”. If an item isn't in our catalogue, I can still add it as a request for our shop team to confirm.";
+        }
+      }
     }
+
+    setChatMessages(old => [...old, { role: "user", text: question }, { role: "assistant", text: answer }]);
+    setDukandarReply(answer);
     setDukandarQuestion("");
   }
 
@@ -339,10 +467,9 @@ export default function App() {
       setCustomItems(old => [...old, {
         name: customItem.trim(),
         quantity: Math.max(1, Number(customQty) || 1),
-        purchaseUnit: customUnit.trim() || "item",
-        recipeNeed: customRecipeNeed.trim()
+        purchaseUnit: "To be confirmed"
       }]);
-      setCustomItem(""); setCustomQty("1"); setCustomUnit("500 g"); setCustomRecipeNeed("");
+      setCustomItem(""); setCustomQty("1");
       showNotice("Item and shopping quantity added to cart.");
     }
   }
@@ -485,7 +612,10 @@ export default function App() {
 .dukandar-popup-form input { min-width:0; flex:1; padding:12px; border:1px solid #d3ddcf; border-radius:10px; font:inherit; }
 .dukandar-popup-links { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
 .dukandar-popup-links button { border:1px solid #d5e1d1; background:#fff; color:#315438; border-radius:9px; padding:9px 11px; cursor:pointer; }
-@media(max-width:650px) { .header-actions { flex-wrap:wrap; } .dukandar-popup-backdrop { padding:0; } .dukandar-popup { width:100%; border-radius:20px 20px 0 0; } .recipe-page { padding:14px; } }
+
+.recipe-hero-banner{display:grid;grid-template-columns:1.2fr .8fr;align-items:center;gap:20px;padding:38px;border-radius:26px;background:linear-gradient(120deg,#e9f5e8,#fff5df 58%,#f8e9d8);overflow:hidden;position:relative;margin-bottom:24px;min-height:220px}.recipe-hero-banner h1{font-size:clamp(2.2rem,4vw,3.4rem);margin:8px 0;color:#1e432d}.recipe-hero-banner p{max-width:650px;color:#566b59;line-height:1.65}.recipe-hero-cta,.hello-kitchen-link{display:inline-flex;gap:12px;align-items:center;background:#16834b;color:white;border:0;border-radius:12px;padding:12px 18px;text-decoration:none;font-weight:800;cursor:pointer}.recipe-hero-art{display:flex;align-items:center;justify-content:center;gap:12px;transform:rotate(-7deg)}.recipe-hero-art span{display:grid;place-items:center;width:94px;height:94px;border-radius:26px;background:#ffffffbd;box-shadow:0 12px 35px #355d3420;font-size:48px;animation:recipeFloat 3.4s ease-in-out infinite}.recipe-hero-art span:nth-child(2){animation-delay:.35s;transform:translateY(18px)}.recipe-hero-art span:nth-child(3){animation-delay:.7s}.recipe-hero-art span:nth-child(4){animation-delay:1s;transform:translateY(16px)}@keyframes recipeFloat{0%,100%{translate:0 0}50%{translate:0 -12px}}.hello-kitchen-feature{display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:26px;border-radius:22px;background:linear-gradient(115deg,#f0f8e9,#fff7e7);border:1px solid #dcebd5;margin:24px 0 34px;box-shadow:0 12px 35px #315a2810}.hello-kitchen-copy h2{margin:8px 0;color:#23452f}.hello-kitchen-copy p{line-height:1.6;color:#5b6c5a}.hello-kitchen-import{display:flex;flex-direction:column;gap:10px;background:#ffffffd9;padding:18px;border-radius:16px}.hello-kitchen-import label{font-weight:800;color:#23452f}.hello-kitchen-import textarea{width:100%;box-sizing:border-box;border:1px solid #d6e2d1;border-radius:12px;padding:13px;font:inherit;resize:vertical}.hello-kitchen-import small{color:#6a7866;line-height:1.4}.recipe-tools{display:grid;gap:14px;margin:18px 0 22px}.recipe-tools>input{width:100%;box-sizing:border-box;padding:14px 16px;border:1px solid #d6e2d1;border-radius:13px;font:inherit}.recipe-filters{display:flex;gap:9px;flex-wrap:wrap}.recipe-filters button{border:1px solid #d9e5d4;background:#fff;color:#45614a;padding:9px 14px;border-radius:999px;cursor:pointer}.recipe-filters button.active{background:#1b8049;color:#fff;border-color:#1b8049}.recipe-showcase-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:18px}.recipe-showcase-card{border:1px solid #e2e9dd;border-radius:19px;overflow:hidden;background:white;box-shadow:0 7px 22px #1c42200a;animation:recipeReveal .45s both;animation-delay:var(--recipe-delay);transition:transform .22s,box-shadow .22s}.recipe-showcase-card:hover{transform:translateY(-5px);box-shadow:0 16px 35px #1c42201a}@keyframes recipeReveal{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}.recipe-card-visual{height:138px;display:grid;place-items:center;position:relative;background:radial-gradient(circle at 50% 45%,#fff 0,#f8f5e9 50%,#eaf3e4 100%)}.recipe-dish-emoji{font-size:74px;filter:drop-shadow(0 8px 6px #0002);transition:transform .25s}.recipe-showcase-card:hover .recipe-dish-emoji{transform:scale(1.12) rotate(-4deg)}.recipe-cuisine-tag{position:absolute;left:13px;top:12px;background:#ffffffdb;color:#315b39;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800}.recipe-card-sparkle{position:absolute;right:17px;top:14px;color:#d59d31}.recipe-showcase-content{padding:16px}.recipe-meta-line{display:flex;gap:10px;flex-wrap:wrap;color:#71806c;font-size:11px}.recipe-showcase-content h3{margin:10px 0 6px;color:#203e2d}.recipe-showcase-content p{min-height:44px;color:#687568;font-size:13px;line-height:1.5}.try-me-button{width:100%;display:flex;justify-content:space-between;align-items:center;border:0;border-radius:11px;background:#16834b;color:white;padding:12px 15px;font-weight:900;letter-spacing:.04em;cursor:pointer;box-shadow:0 6px 15px #16834b24}.try-me-button:hover,.recipe-hero-cta:hover{background:#116d3d}.recipe-detail-modal{width:min(650px,100%);max-height:88vh;overflow:auto;background:white;border-radius:22px;padding:25px;position:relative}.recipe-detail-top{display:flex;gap:18px;align-items:center;padding:12px 0 20px}.recipe-detail-top>span{font-size:64px}.recipe-detail-top h2{margin:5px 0}.recipe-detail-top p{color:#647264}.recipe-ingredient-list,.recipe-steps-list{padding-left:22px;line-height:1.8;color:#526252}.recipe-ingredient-list li{padding:4px 0}.recipe-ingredient-list li b{margin-left:12px;color:#23452f}.recipe-add-cart{width:100%;margin-top:12px}.dukandar-popup-backdrop{background:transparent;pointer-events:none;align-items:flex-end}.dukandar-popup{pointer-events:auto;margin:0 0 82px 0;animation:dukandarPop .22s ease-out}.dukandar-popup-body{max-height:440px;overflow:auto}.dukandar-chat-history{display:grid;gap:9px;max-height:290px;overflow:auto}.dukandar-floating-button{animation:dukandarPulse 2.8s ease-in-out infinite}.dukandar-floating-button span img,.dukandar-popup-avatar img{object-fit:contain;object-position:center}@keyframes dukandarPulse{0%,100%{box-shadow:0 8px 28px #18351f45}50%{box-shadow:0 8px 34px #16834b75}}@keyframes dukandarPop{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+
+@media(max-width:650px) { .recipe-hero-banner,.hello-kitchen-feature{grid-template-columns:1fr;padding:20px}.recipe-hero-art span{width:66px;height:66px;font-size:36px}.recipe-detail-top{align-items:flex-start}.header-actions { flex-wrap:wrap; } .dukandar-popup-backdrop { padding:0; } .dukandar-popup { width:100%; border-radius:20px 20px 0 0; } .recipe-page { padding:14px; } }
 `}</style>
     <div className="app-shell">
       {!supabaseReady && <div className="top-strip">Setup required: configure Supabase environment variables before accepting live orders.</div>}
@@ -528,13 +658,11 @@ export default function App() {
             <span>{["🛍️","🍚","🫘","🫒","🌶️","🧂","🍪","🍟","🍫","☕","🥛","🍞","🍎","🥕","🧴","🧼","💇","🪥","🧹","🫧","🧺","🍽️","🪔","👶","💊","🥤","🍜","🥜","🐾","📒"][i]}</span>{c}
           </button>)}</div>
         </section>
-        <section className="custom-section" id="custom-request"><div><span className="eyebrow">NEED SOMETHING ELSE?</span><h2>Can’t find an item? Request it here</h2><p>Enter the recipe measurement separately from the pack size you want to buy. The shop will confirm availability.</p></div>
-          <form onSubmit={addCustomItem} style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(145px,1fr))",gap:10,width:"100%"}}>
-            <input value={customItem} onChange={e => setCustomItem(e.target.value)} placeholder="Enter item name..." required />
-            <input value={customRecipeNeed} onChange={e => setCustomRecipeNeed(e.target.value)} placeholder="Recipe needs e.g. 2 cups (400 g)" aria-label="Recipe requirement" />
-            <input aria-label="Number of packs" type="number" min="1" step="1" value={customQty} onChange={e => setCustomQty(e.target.value)} placeholder="Packs" />
-            <input aria-label="Pack size or purchase unit" value={customUnit} onChange={e => setCustomUnit(e.target.value)} placeholder="Buying size e.g. 500 g" required />
-            <button className="primary-button">Add shopping request</button>
+        <section className="custom-section" id="custom-request"><div><span className="eyebrow">NEED SOMETHING ELSE?</span><h2>Can’t find an item? Request it here</h2><p>Just enter the item name and quantity. We’ll confirm the pack size and availability.</p></div>
+          <form onSubmit={addCustomItem} className="custom-request-form" style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) 130px auto",gap:10,width:"100%",alignItems:"center"}}>
+            <input value={customItem} onChange={e => setCustomItem(e.target.value)} placeholder="Enter item name..." aria-label="Item name" required />
+            <input aria-label="Quantity" type="number" min="1" step="1" value={customQty} onChange={e => setCustomQty(e.target.value)} placeholder="Qty" required />
+            <button className="primary-button">Add request</button>
           </form>
         </section>
 
@@ -551,20 +679,16 @@ export default function App() {
 
 
       {view === "recipes" && <main className="recipe-page">
-        <div className="section-heading"><div><span className="eyebrow">COOK SOMETHING TODAY</span><h1>Recipe Book</h1><p>Browse recipes, then add the ingredients to your Balaji Home Needs cart.</p></div><button className="back-button" type="button" onClick={() => setView("shop")}>← Back to Shop</button></div>
-        <section className="panel recipe-tab-panel" style={{margin:"18px 0"}}>
-          <div className="section-heading"><div><span className="eyebrow">COOK SOMETHING TODAY</span><h1>Recipe Book</h1><p>Choose a recipe and add its ingredients to your shopping request.</p></div></div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",gap:12}}>
-            {recipeBook.map(recipe=><article key={recipe.id} style={{padding:14,border:"1px solid #e1e8dc",borderRadius:14,background:"#fff"}}>
-              <small style={{color:"#66765e"}}>{recipe.cuisine} · Serves {recipe.servings}</small><h3 style={{margin:"6px 0"}}>{recipe.name}</h3>
-              <p style={{fontSize:13,color:"#5f6b5b"}}>{recipe.ingredients.map(x=>`${x[0]} (${x[1]})`).join(" · ")}</p>
-              <button className="primary-button" type="button" onClick={()=>addRecipeToCart(recipe)}>Add recipe ingredients</button>
-            </article>)}
-          </div>
-
+        <section className="recipe-hero-banner"><div><span className="eyebrow">A WORLD OF FLAVOURS</span><h1>Recipe Book</h1><p>Discover Indian favourites and dishes from around the world. Pick a recipe, explore the ingredients and add everything to your Balaji Home Needs cart.</p><button className="recipe-hero-cta" onClick={()=>document.getElementById("recipe-collection")?.scrollIntoView({behavior:"smooth"})}>Explore recipes <span>↓</span></button></div><div className="recipe-hero-art" aria-hidden="true"><span>🍛</span><span>🥗</span><span>🍝</span><span>🥞</span></div></section>
+        <section className="hello-kitchen-feature"><div className="hello-kitchen-copy"><span className="eyebrow">YOUR RECIPE DISCOVERY CORNER</span><h2>Found something delicious on Hello Kitchen?</h2><p>Open Hello Kitchen, choose any recipe, copy its ingredient list and paste it below. Dukandar will match ingredients with our store catalogue and add the requests to your cart.</p><a href="https://www.hellokitchen.in/" target="_blank" rel="noopener noreferrer" className="hello-kitchen-link">Explore Hello Kitchen ↗</a></div><div className="hello-kitchen-import"><label htmlFor="recipe-import">Paste recipe ingredients</label><textarea id="recipe-import" rows="4" value={recipeImportText} onChange={e=>setRecipeImportText(e.target.value)} placeholder={`Example:\n2 cups basmati rice\n1 onion\n2 tomatoes\n1 tsp garam masala`} /><button className="primary-button" type="button" onClick={importRecipeIngredients}>Match ingredients & add to cart</button><small>Items not found in the catalogue are added as requests for the shopkeeper to confirm.</small></div></section>
+        <section id="recipe-collection" className="recipe-collection"><div className="section-heading"><div><span className="eyebrow">FIND YOUR NEXT FAVOURITE</span><h2>Explore recipes</h2><p>From everyday Indian meals to international favourites and desserts.</p></div><span>{recipeBook.length} recipes</span></div>
+          <div className="recipe-tools"><input value={recipeSearch} onChange={e=>setRecipeSearch(e.target.value)} placeholder="Search recipes or cuisines..." aria-label="Search recipes"/><div className="recipe-filters">{["All","Breakfast","Indian favourites","Quick meals","World kitchen","Desserts"].map(cat=><button key={cat} className={recipeCategory===cat?"active":""} onClick={()=>setRecipeCategory(cat)}>{cat}</button>)}</div></div>
+          <div className="recipe-showcase-grid">{recipeBook.filter(r=>(recipeCategory==="All"||r.category===recipeCategory)&&`${r.name} ${r.cuisine} ${r.description}`.toLowerCase().includes(recipeSearch.toLowerCase())).map((recipe,index)=><article className="recipe-showcase-card" key={recipe.id} style={{"--recipe-delay":`${index%6*70}ms`}}><div className="recipe-card-visual"><span className="recipe-dish-emoji">{recipe.emoji}</span><span className="recipe-cuisine-tag">{recipe.cuisine}</span><span className="recipe-card-sparkle">✦</span></div><div className="recipe-showcase-content"><div className="recipe-meta-line"><span>⏱ {recipe.time}</span><span>{recipe.difficulty}</span><span>Serves {recipe.servings}</span></div><h3>{recipe.name}</h3><p>{recipe.description}</p><button className="try-me-button" onClick={()=>setActiveRecipe(recipe)}>TRY ME <span>→</span></button></div></article>)}</div>
+          {!recipeBook.filter(r=>(recipeCategory==="All"||r.category===recipeCategory)&&`${r.name} ${r.cuisine} ${r.description}`.toLowerCase().includes(recipeSearch.toLowerCase())).length&&<p className="empty">No recipes found. Try another dish or cuisine.</p>}
         </section>
-
+        <button className="back-button" type="button" onClick={()=>setView("shop")}>← Back to Shop</button>
       </main>}
+      {activeRecipe && <div className="modal-backdrop recipe-detail-backdrop" onClick={()=>setActiveRecipe(null)}><section className="recipe-detail-modal" role="dialog" aria-modal="true" aria-label={`${activeRecipe.name} recipe`} onClick={e=>e.stopPropagation()}><button className="modal-close" onClick={()=>setActiveRecipe(null)}>✕</button><div className="recipe-detail-top"><span>{activeRecipe.emoji}</span><div><span className="eyebrow">{activeRecipe.cuisine} · {activeRecipe.time}</span><h2>{activeRecipe.name}</h2><p>{activeRecipe.description}</p></div></div><h3>Ingredients</h3><ul className="recipe-ingredient-list">{activeRecipe.ingredients.map((item,i)=><li key={i}><span>{item[0]}</span><b>{item[1]}</b></li>)}</ul><h3>How to make it</h3><ol className="recipe-steps-list">{activeRecipe.steps.map((step,i)=><li key={i}>{step}</li>)}</ol><button className="primary-button recipe-add-cart" onClick={()=>addRecipeToCart(activeRecipe)}>Add all ingredients to cart</button></section></div>}
 
       {view === "admin" && <main className="admin-page">
         {!admin ? <form className="login-card" onSubmit={login}><div className="login-icon">🔐</div><h2>Store Admin</h2><p>Sign in using your authorised admin email and password.</p><input type="email" value={adminEmail} onChange={e => setAdminEmail(e.target.value)} placeholder="Admin email" required /><input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} placeholder="Admin password" autoComplete="current-password" required /><button className="primary-button">Login</button>{authMessage && <p className="delivery-note">{authMessage}</p>}<button type="button" className="back-button" onClick={() => setView("shop")}>← Back to store</button></form> :
@@ -636,15 +760,14 @@ export default function App() {
 
       {dukandarOpen && <div className="dukandar-popup-backdrop" onClick={() => setDukandarOpen(false)}>
         <section className="dukandar-popup" role="dialog" aria-modal="true" aria-label="Ask Dukandar assistant" onClick={e => e.stopPropagation()}>
-          <div className="dukandar-popup-head"><div className="dukandar-popup-avatar"><img src="/dukandar-mascot.png" alt="Dukandar assistant" /></div><div><b>Ask Dukandar</b><small>Your Balaji Home Needs assistant</small></div><button type="button" aria-label="Close Ask Dukandar" onClick={() => setDukandarOpen(false)}>✕</button></div>
-          <div className="dukandar-popup-body"><div className="dukandar-chat-bubble">Vanakkam! 🙏 What groceries do you need? I can check the store catalogue or help you request an item that is not listed.</div>
-            {dukandarReply && <div className="dukandar-chat-reply">{dukandarReply}</div>}
-            <form onSubmit={askDukandar} className="dukandar-popup-form"><input autoFocus value={dukandarQuestion} onChange={e=>setDukandarQuestion(e.target.value)} placeholder="Ask for an item, e.g. Toor Dal..."/><button className="primary-button" type="submit">Send</button></form>
-            <div className="dukandar-popup-links"><button type="button" onClick={()=>{setDukandarOpen(false);setView("recipes");}}>📖 Open Recipe Book</button><button type="button" onClick={()=>{setDukandarOpen(false);setView("shop");}}>🛒 Browse groceries</button></div>
+          <div className="dukandar-popup-head"><div className="dukandar-popup-avatar"><img src="/dukandar-avatar.png" alt="Dukandar assistant" /></div><div><b>Ask Dukandar</b><small>Your friendly store assistant</small></div><button type="button" aria-label="Close Ask Dukandar" onClick={() => setDukandarOpen(false)}>✕</button></div>
+          <div className="dukandar-popup-body"><div className="dukandar-chat-history">{chatMessages.map((message,index)=><div key={index} className={message.role==="user"?"dukandar-chat-reply":"dukandar-chat-bubble"}>{message.text}</div>)}</div>
+            <form onSubmit={askDukandar} className="dukandar-popup-form"><input autoFocus value={dukandarQuestion} onChange={e=>setDukandarQuestion(e.target.value)} placeholder="Ask for a recipe or say: Add rice to my cart..."/><button className="primary-button" type="submit">Send</button></form>
+            <div className="dukandar-popup-links"><button type="button" onClick={()=>{setDukandarQuestion("Suggest a recipe for dinner");}}>🍽️ Suggest a recipe</button><button type="button" onClick={()=>{setDukandarOpen(false);setView("recipes");}}>📖 Open Recipe Book</button><button type="button" onClick={()=>{setDukandarOpen(false);setView("shop");}}>🛒 Browse groceries</button></div>
           </div>
         </section>
       </div>}
-      {!dukandarOpen && <button type="button" className="dukandar-floating-button" onClick={()=>setDukandarOpen(true)}><span><img src="/dukandar-mascot.png" alt="" /></span> Ask Dukandar</button>}
+      {!dukandarOpen && <button type="button" className="dukandar-floating-button" onClick={()=>setDukandarOpen(true)}><span><img src="/dukandar-avatar.png" alt="" /></span> Ask Dukandar</button>}
       <footer><b>BALAJI HOME NEEDS</b><p>Everyday essentials, delivered with care.</p><small>© {new Date().getFullYear()} Balaji Home Needs. All rights reserved.</small></footer>
       {count + customCount > 0 && view === "shop" && <button className="floating-cart" onClick={()=>setCheckout(true)}>🛒 View Cart · {totalCartCount} items</button>}
       {notice && <div className="toast">{notice}</div>}
