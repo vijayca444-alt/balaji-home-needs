@@ -760,14 +760,14 @@ export default function App() {
 
       {dukandarOpen && <div className="dukandar-popup-backdrop" onClick={() => setDukandarOpen(false)}>
         <section className="dukandar-popup" role="dialog" aria-modal="true" aria-label="Ask Dukandar assistant" onClick={e => e.stopPropagation()}>
-          <div className="dukandar-popup-head"><div className="dukandar-popup-avatar"><img src="/dukandar-avatar.png" alt="Dukandar assistant" /></div><div><b>Ask Dukandar</b><small>Your friendly store assistant</small></div><button type="button" aria-label="Close Ask Dukandar" onClick={() => setDukandarOpen(false)}>✕</button></div>
+          <div className="dukandar-popup-head"><div className="dukandar-popup-avatar"><img src="/dukandar-mascot.png" alt="Dukandar assistant" /></div><div><b>Ask Dukandar</b><small>Your friendly store assistant</small></div><button type="button" aria-label="Close Ask Dukandar" onClick={() => setDukandarOpen(false)}>✕</button></div>
           <div className="dukandar-popup-body"><div className="dukandar-chat-history">{chatMessages.map((message,index)=><div key={index} className={message.role==="user"?"dukandar-chat-reply":"dukandar-chat-bubble"}>{message.text}</div>)}</div>
             <form onSubmit={askDukandar} className="dukandar-popup-form"><input autoFocus value={dukandarQuestion} onChange={e=>setDukandarQuestion(e.target.value)} placeholder="Ask for a recipe or say: Add rice to my cart..."/><button className="primary-button" type="submit">Send</button></form>
             <div className="dukandar-popup-links"><button type="button" onClick={()=>{setDukandarQuestion("Suggest a recipe for dinner");}}>🍽️ Suggest a recipe</button><button type="button" onClick={()=>{setDukandarOpen(false);setView("recipes");}}>📖 Open Recipe Book</button><button type="button" onClick={()=>{setDukandarOpen(false);setView("shop");}}>🛒 Browse groceries</button></div>
           </div>
         </section>
       </div>}
-      {!dukandarOpen && <button type="button" className="dukandar-floating-button" onClick={()=>setDukandarOpen(true)}><span><img src="/dukandar-avatar.png" alt="" /></span> Ask Dukandar</button>}
+      {!dukandarOpen && <button type="button" className="dukandar-floating-button" onClick={()=>setDukandarOpen(true)}><span><img src="/dukandar-mascot.png" alt="" /></span> Ask Dukandar</button>}
       <footer><b>BALAJI HOME NEEDS</b><p>Everyday essentials, delivered with care.</p><small>© {new Date().getFullYear()} Balaji Home Needs. All rights reserved.</small></footer>
       {count + customCount > 0 && view === "shop" && <button className="floating-cart" onClick={()=>setCheckout(true)}>🛒 View Cart · {totalCartCount} items</button>}
       {notice && <div className="toast">{notice}</div>}
