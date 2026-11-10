@@ -217,12 +217,19 @@ export default function App() {
   });
   const [deliveryLocation, setDeliveryLocation] = useState(null);
   const [locationMessage, setLocationMessage] = useState("");
+  const [addressResolving, setAddressResolving] = useState(false);
   const [deliveryDistanceKm, setDeliveryDistanceKm] = useState(null);
   const [deliveryBlocked, setDeliveryBlocked] = useState(false);
   const [showDeleted, setShowDeleted] = useState(false);
   const [checkout, setCheckout] = useState(false);
   const [submittedOrderId, setSubmittedOrderId] = useState("");
   const [customer, setCustomer] = useState({ name: "", phone: "", address: "" });
+  const [customerUser, setCustomerUser] = useState(null);
+  const [customerProfile, setCustomerProfile] = useState({ full_name: "", phone: "", address: "" });
+  const [customerOrders, setCustomerOrders] = useState([]);
+  const [customerAuthMode, setCustomerAuthMode] = useState("login");
+  const [customerAuthForm, setCustomerAuthForm] = useState({ name: "", phone: "", email: "", password: "" });
+  const [customerAuthBusy, setCustomerAuthBusy] = useState(false);
   const [customItem, setCustomItem] = useState("");
   const [customQty, setCustomQty] = useState("1");
   const [customUnit, setCustomUnit] = useState("500 g");
@@ -268,17 +275,62 @@ export default function App() {
       setProducts(data.map(row => row.payload));
     });
     supabase.auth.getSession().then(({ data }) => {
-      const user = data?.session?.user;
-      if (user?.email?.toLowerCase() === ADMIN_EMAIL) { setAdmin(true); setView("admin"); }
+      const user = data?.session?.user || null;
+      const allowed = user?.email?.toLowerCase() === ADMIN_EMAIL;
+      setCustomerUser(user && !allowed ? user : null);
+      if (allowed) { setAdmin(true); setView("admin"); }
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      const allowed = session?.user?.email?.toLowerCase() === ADMIN_EMAIL;
+      const user = session?.user || null;
+      const allowed = user?.email?.toLowerCase() === ADMIN_EMAIL;
       setAdmin(!!allowed);
+      setCustomerUser(user && !allowed ? user : null);
       if (allowed) setView("admin");
-      else if (!session) setAdmin(false);
+      else if (!session) { setAdmin(false); setCustomerOrders([]); }
     });
     return () => { alive = false; listener.subscription.unsubscribe(); };
   }, []);
+
+  useEffect(() => {
+    if (!supabaseReady || !customerUser?.id || admin) return;
+    let alive = true;
+    (async () => {
+      const { data: profile, error: profileError } = await supabase.from("customer_profiles")
+        .select("full_name,phone,address").eq("id", customerUser.id).maybeSingle();
+      if (!alive) return;
+      let savedProfile = profile;
+      if (!savedProfile) {
+        savedProfile = {
+          full_name: customerUser.user_metadata?.full_name || "",
+          phone: customerUser.user_metadata?.phone || "",
+          address: ""
+        };
+        const { error: createError } = await supabase.from("customer_profiles").upsert({
+          id: customerUser.id, ...savedProfile, updated_at: new Date().toISOString()
+        });
+        if (createError) showNotice("Profile setup needs the Customer Login SQL migration: " + createError.message);
+      }
+      setCustomerProfile(savedProfile);
+      setCustomer(old => ({
+        ...old,
+        name: savedProfile.full_name || old.name,
+        phone: savedProfile.phone || old.phone,
+        address: savedProfile.address || old.address
+      }));
+      const { data: rows, error: ordersError } = await supabase.from("orders")
+        .select("payload,status,created_at").eq("customer_id", customerUser.id)
+        .order("created_at", { ascending: false });
+      if (!alive) return;
+      if (ordersError) {
+        setCustomerOrders([]);
+        if (!ordersError.message?.toLowerCase().includes("customer_id")) showNotice("Could not load order history: " + ordersError.message);
+      } else {
+        setCustomerOrders((rows || []).map(row => ({ ...row.payload, status: row.status || row.payload?.status })));
+      }
+      if (profileError && !profileError.message?.toLowerCase().includes("customer_profiles")) showNotice("Could not load customer profile: " + profileError.message);
+    })();
+    return () => { alive = false; };
+  }, [customerUser?.id, admin]);
 
   useEffect(() => {
     if (!supabaseReady || !admin) return;
@@ -301,26 +353,99 @@ export default function App() {
   }, [admin]);
 
   function captureLocation() {
-    if (!navigator.geolocation) { setLocationMessage("This browser does not support location sharing. Please use a device with GPS to verify delivery eligibility."); return; }
-    setLocationMessage("Checking whether your address is within our 3 km delivery area… Please allow location access.");
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        const location = { latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: Math.round(pos.coords.accuracy) };
-        const distance = distanceInKm(STORE_LOCATION, location);
-        setDeliveryLocation(location);
-        setDeliveryDistanceKm(distance);
-        const outside = distance > DELIVERY_RADIUS_KM;
-        setDeliveryBlocked(outside);
-        setLocationMessage(outside
-          ? `Your location is approximately ${distance.toFixed(2)} km from our store, outside our 3 km delivery area.`
-          : `Great news! Your location is approximately ${distance.toFixed(2)} km from our store and is within our delivery area.`);
-      },
-      err => {
-        setDeliveryLocation(null); setDeliveryDistanceKm(null); setDeliveryBlocked(false);
-        setLocationMessage(err.code === 1 ? "Location permission was denied. Please allow location access so we can verify whether delivery is available." : "Could not get your location. Please try again with GPS enabled.");
-      },
-      { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 }
-    );
+    if (!navigator.geolocation) {
+      setLocationMessage("This browser does not support location sharing. Please use a device with GPS to verify delivery eligibility.");
+      return;
+    }
+
+    setLocationMessage("Finding your precise location… Keep Location turned on and wait a few seconds.");
+    let bestPosition = null;
+    let watchId = null;
+    let finished = false;
+
+    const finish = (position, timedOut = false) => {
+      if (finished) return;
+      finished = true;
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      clearTimeout(finishTimer);
+
+      if (!position || position.coords.accuracy > 500) {
+        setDeliveryLocation(null);
+        setDeliveryDistanceKm(null);
+        setDeliveryBlocked(false);
+        const accuracy = position ? Math.round(position.coords.accuracy) : null;
+        setLocationMessage(accuracy
+          ? `Your location accuracy is approximately ±${accuracy} m, which is too low for a reliable 3 km delivery check. Turn on Precise Location, enable Wi-Fi, move near a window or outdoors, and try again.`
+          : "Could not get your location. Turn on Location and try again outdoors or near a window.");
+        return;
+      }
+
+      const location = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: Math.round(position.coords.accuracy)
+      };
+      const distance = distanceInKm(STORE_LOCATION, location);
+      setDeliveryLocation(location);
+      setDeliveryDistanceKm(distance);
+      const outside = distance > DELIVERY_RADIUS_KM;
+      setDeliveryBlocked(outside);
+      setLocationMessage(outside
+        ? `Your location is approximately ${distance.toFixed(2)} km from our store, outside our 3 km delivery area. GPS accuracy: ±${location.accuracy} m.`
+        : `Location checked: approximately ${distance.toFixed(2)} km from our store (GPS accuracy ±${location.accuracy} m). ${timedOut ? "Using the best location found." : "Your location is within our delivery area."} Finding your address…`);
+
+      // Convert captured GPS coordinates into a readable address for the address field.
+      // If the customer has already typed an address while lookup is running, keep their text.
+      setAddressResolving(true);
+      fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(location.latitude)}&lon=${encodeURIComponent(location.longitude)}&zoom=18&addressdetails=1`, {
+        headers: { "Accept-Language": "en" }
+      })
+        .then(response => response.ok ? response.json() : Promise.reject(new Error("Address lookup unavailable")))
+        .then(result => {
+          const resolvedAddress = result?.display_name;
+          if (resolvedAddress) {
+            setCustomer(previous => previous.address.trim() ? previous : { ...previous, address: resolvedAddress });
+            setLocationMessage(outside
+              ? `Address found and added. Your location is approximately ${distance.toFixed(2)} km from our store, outside our 3 km delivery area.`
+              : `Your address was added automatically. Location is approximately ${distance.toFixed(2)} km from our store (GPS accuracy ±${location.accuracy} m).`);
+          } else {
+            setLocationMessage("Location captured. Please enter your full address manually for delivery.");
+          }
+        })
+        .catch(() => setLocationMessage("Location captured, but the street address could not be found automatically. Please enter your full address manually."))
+        .finally(() => setAddressResolving(false));
+    };
+
+    const finishTimer = setTimeout(() => finish(bestPosition, true), 25000);
+    try {
+      watchId = navigator.geolocation.watchPosition(
+        position => {
+          if (!bestPosition || position.coords.accuracy < bestPosition.coords.accuracy) {
+            bestPosition = position;
+          }
+          const accuracy = Math.round(position.coords.accuracy);
+          setLocationMessage(`Improving GPS accuracy… Current accuracy ±${accuracy} m. Please keep this screen open.`);
+          if (accuracy <= 100) finish(position, false);
+        },
+        error => {
+          if (bestPosition) finish(bestPosition, true);
+          else {
+            if (finished) return;
+            finished = true;
+            clearTimeout(finishTimer);
+            setDeliveryLocation(null);
+            setDeliveryDistanceKm(null);
+            setDeliveryBlocked(false);
+            setLocationMessage(error.code === 1
+              ? "Location permission was denied. Allow precise location access in your browser settings and try again."
+              : "Could not get your location. Turn on Location, enable Wi-Fi, and try again near a window or outdoors.");
+          }
+        },
+        { enableHighAccuracy: true, timeout: 60000, maximumAge: 0 }
+      );
+    } catch (error) {
+      finish(null, true);
+    }
   }
 
   const filteredProducts = useMemo(() => products.filter(p =>
@@ -496,29 +621,107 @@ export default function App() {
       showNotice("Item and shopping quantity added to cart.");
     }
   }
+  async function submitCustomerAuth(e) {
+    e.preventDefault();
+    if (!supabaseReady) { showNotice("Customer accounts require your existing Supabase connection. Configure it first."); return; }
+    const email = customerAuthForm.email.trim().toLowerCase();
+    const password = customerAuthForm.password;
+    if (password.length < 8) { showNotice("Please use a password with at least 8 characters."); return; }
+    if (customerAuthMode === "signup") {
+      if (!customerAuthForm.name.trim() || !/^[6-9]\d{9}$/.test(customerAuthForm.phone)) {
+        showNotice("Enter your name and a valid 10-digit Indian mobile number."); return;
+      }
+    }
+    setCustomerAuthBusy(true);
+    try {
+      if (customerAuthMode === "signup") {
+        const { data, error } = await supabase.auth.signUp({
+          email, password,
+          options: { data: { full_name: customerAuthForm.name.trim(), phone: customerAuthForm.phone } }
+        });
+        if (error) throw error;
+        if (data.session && data.user) {
+          const profile = { id: data.user.id, full_name: customerAuthForm.name.trim(), phone: customerAuthForm.phone, address: "", updated_at: new Date().toISOString() };
+          const { error: profileError } = await supabase.from("customer_profiles").upsert(profile);
+          if (profileError) throw profileError;
+          setCustomerProfile({ full_name: profile.full_name, phone: profile.phone, address: "" });
+          setCustomer({ name: profile.full_name, phone: profile.phone, address: "" });
+          setView("account");
+          showNotice("Your customer account has been created.");
+        } else {
+          setCustomerAuthMode("login");
+          showNotice("Account created. Check your email, verify your address, then log in.");
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        setCustomerAuthForm({ name: "", phone: "", email: "", password: "" });
+        setView("account");
+        showNotice("Welcome back to Balaji Home Needs!");
+      }
+    } catch (error) {
+      showNotice("Account error: " + (error.message || "Please try again."));
+    } finally { setCustomerAuthBusy(false); }
+  }
+
+  async function saveCustomerProfile(e) {
+    e.preventDefault();
+    if (!customerUser?.id) return;
+    if (!customerProfile.full_name.trim() || !/^[6-9]\d{9}$/.test(customerProfile.phone)) {
+      showNotice("Enter your name and a valid 10-digit mobile number."); return;
+    }
+    const profile = {
+      id: customerUser.id,
+      full_name: customerProfile.full_name.trim(),
+      phone: customerProfile.phone,
+      address: customerProfile.address.trim(),
+      updated_at: new Date().toISOString()
+    };
+    const { error } = await supabase.from("customer_profiles").upsert(profile);
+    if (error) { showNotice("Could not save profile: " + error.message); return; }
+    setCustomer({ name: profile.full_name, phone: profile.phone, address: profile.address });
+    showNotice("Your details and delivery address have been saved.");
+  }
+
+  async function customerLogout() {
+    if (supabaseReady) await supabase.auth.signOut();
+    setCustomerUser(null);
+    setCustomerOrders([]);
+    setView("shop");
+    showNotice("You have been logged out.");
+  }
+
   function submitOrder(e) {
     e.preventDefault();
     if (!customer.name.trim() || !/^[6-9]\d{9}$/.test(customer.phone) || !customer.address.trim()) {
       showNotice("Please enter a valid name, 10-digit mobile number and address."); return;
     }
     if (!count && !customCount) { showNotice("Please add at least one item."); return; }
-    if (!deliveryLocation) { setLocationMessage("Please share your current location so we can check whether your address is within 3 km of our store."); showNotice("Please verify your delivery location before submitting."); return; }
-    const verifiedDistance = distanceInKm(STORE_LOCATION, deliveryLocation);
-    setDeliveryDistanceKm(verifiedDistance);
-    if (verifiedDistance > DELIVERY_RADIUS_KM) { setDeliveryBlocked(true); showNotice("Sorry, your address is outside our 3 km delivery area."); return; }
-    if (deliveryLocation.accuracy > 150) { showNotice("GPS accuracy is low. Please update your location for a reliable delivery check."); return; }
+    if (deliveryLocation) {
+      const verifiedDistance = distanceInKm(STORE_LOCATION, deliveryLocation);
+      setDeliveryDistanceKm(verifiedDistance);
+      if (verifiedDistance > DELIVERY_RADIUS_KM) { setDeliveryBlocked(true); showNotice("Sorry, your address is outside our 3 km delivery area."); return; }
+      if (deliveryLocation.accuracy > 500) { showNotice("GPS accuracy is still too low. Please update your location outdoors or near a window, or continue with your manually entered address."); return; }
+    } else {
+      // Permit checkout with a manually entered address; delivery distance will be verified by the store.
+      setLocationMessage("You are continuing without GPS. Please provide a complete address; delivery availability will be checked manually.");
+    }
     const order = {
       id: "BH" + Date.now().toString().slice(-8),
       customer: { ...customer },
+      customer_id: customerUser?.id || null,
       items: cartItems.map(p => ({ ...p, quantity: cart[p.id], purchaseUnit: cartPurchaseUnits[p.id] || p.unit || "item", recipeNeed: cartRecipeNeeds[p.id] || "", quotedPrice: "" })),
       customItems: customItems.map(item => ({ ...item, quotedPrice: "" })),
-      deliveryLocation, total: null, status: "Order Received", date: new Date().toLocaleString("en-IN")
+      deliveryLocation,
+      deliveryVerification: deliveryLocation ? "GPS location shared" : "Manual address only — delivery distance not verified",
+      total: null, status: "Order Received", date: new Date().toLocaleString("en-IN")
     };
     if (supabaseReady) {
-      supabase.from("orders").insert({ id: order.id, payload: order, status: order.status, is_deleted: false })
+      supabase.from("orders").insert({ id: order.id, payload: order, customer_id: customerUser?.id || null, status: order.status, is_deleted: false })
         .then(({ error }) => { if (error) showNotice("Order save failed. Please try again: " + error.message); });
     }
     setOrders(old => [order, ...old]);
+    if (customerUser) setCustomerOrders(old => [order, ...old]);
     setSubmittedOrderId(order.id);
     setCart({}); setCustomItems([]); setCartRecipeNeeds({}); setCartPurchaseUnits({}); setCheckout(false);
     setCustomer({ name: "", phone: "", address: "" }); setDeliveryLocation(null); setDeliveryDistanceKm(null); setDeliveryBlocked(false); setLocationMessage(""); setView("shop");
@@ -639,6 +842,8 @@ export default function App() {
 .recipe-hero-banner{display:grid;grid-template-columns:1.2fr .8fr;align-items:center;gap:20px;padding:38px;border-radius:26px;background:linear-gradient(120deg,#e9f5e8,#fff5df 58%,#f8e9d8);overflow:hidden;position:relative;margin-bottom:24px;min-height:220px}.recipe-hero-banner h1{font-size:clamp(2.2rem,4vw,3.4rem);margin:8px 0;color:#1e432d}.recipe-hero-banner p{max-width:650px;color:#566b59;line-height:1.65}.recipe-hero-cta,.hello-kitchen-link{display:inline-flex;gap:12px;align-items:center;background:#16834b;color:white;border:0;border-radius:12px;padding:12px 18px;text-decoration:none;font-weight:800;cursor:pointer}.recipe-hero-art{display:flex;align-items:center;justify-content:center;gap:12px;transform:rotate(-7deg)}.recipe-hero-art span{display:grid;place-items:center;width:94px;height:94px;border-radius:26px;background:#ffffffbd;box-shadow:0 12px 35px #355d3420;font-size:48px;animation:recipeFloat 3.4s ease-in-out infinite}.recipe-hero-art span:nth-child(2){animation-delay:.35s;transform:translateY(18px)}.recipe-hero-art span:nth-child(3){animation-delay:.7s}.recipe-hero-art span:nth-child(4){animation-delay:1s;transform:translateY(16px)}@keyframes recipeFloat{0%,100%{translate:0 0}50%{translate:0 -12px}}.hello-kitchen-feature{display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:26px;border-radius:22px;background:linear-gradient(115deg,#f0f8e9,#fff7e7);border:1px solid #dcebd5;margin:24px 0 34px;box-shadow:0 12px 35px #315a2810}.hello-kitchen-copy h2{margin:8px 0;color:#23452f}.hello-kitchen-copy p{line-height:1.6;color:#5b6c5a}.hello-kitchen-import{display:flex;flex-direction:column;gap:10px;background:#ffffffd9;padding:18px;border-radius:16px}.hello-kitchen-import label{font-weight:800;color:#23452f}.hello-kitchen-import textarea{width:100%;box-sizing:border-box;border:1px solid #d6e2d1;border-radius:12px;padding:13px;font:inherit;resize:vertical}.hello-kitchen-import small{color:#6a7866;line-height:1.4}.recipe-tools{display:grid;gap:14px;margin:18px 0 22px}.recipe-tools>input{width:100%;box-sizing:border-box;padding:14px 16px;border:1px solid #d6e2d1;border-radius:13px;font:inherit}.recipe-filters{display:flex;gap:9px;flex-wrap:wrap}.recipe-filters button{border:1px solid #d9e5d4;background:#fff;color:#45614a;padding:9px 14px;border-radius:999px;cursor:pointer}.recipe-filters button.active{background:#1b8049;color:#fff;border-color:#1b8049}.recipe-showcase-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(235px,1fr));gap:18px}.recipe-showcase-card{border:1px solid #e2e9dd;border-radius:19px;overflow:hidden;background:white;box-shadow:0 7px 22px #1c42200a;animation:recipeReveal .45s both;animation-delay:var(--recipe-delay);transition:transform .22s,box-shadow .22s}.recipe-showcase-card:hover{transform:translateY(-5px);box-shadow:0 16px 35px #1c42201a}@keyframes recipeReveal{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}.recipe-card-visual{height:138px;display:grid;place-items:center;position:relative;background:radial-gradient(circle at 50% 45%,#fff 0,#f8f5e9 50%,#eaf3e4 100%)}.recipe-dish-emoji{font-size:74px;filter:drop-shadow(0 8px 6px #0002);transition:transform .25s}.recipe-showcase-card:hover .recipe-dish-emoji{transform:scale(1.12) rotate(-4deg)}.recipe-cuisine-tag{position:absolute;left:13px;top:12px;background:#ffffffdb;color:#315b39;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800}.recipe-card-sparkle{position:absolute;right:17px;top:14px;color:#d59d31}.recipe-showcase-content{padding:16px}.recipe-meta-line{display:flex;gap:10px;flex-wrap:wrap;color:#71806c;font-size:11px}.recipe-showcase-content h3{margin:10px 0 6px;color:#203e2d}.recipe-showcase-content p{min-height:44px;color:#687568;font-size:13px;line-height:1.5}.try-me-button{width:100%;display:flex;justify-content:space-between;align-items:center;border:0;border-radius:11px;background:#16834b;color:white;padding:12px 15px;font-weight:900;letter-spacing:.04em;cursor:pointer;box-shadow:0 6px 15px #16834b24}.try-me-button:hover,.recipe-hero-cta:hover{background:#116d3d}.recipe-detail-modal{width:min(650px,100%);max-height:88vh;overflow:auto;background:white;border-radius:22px;padding:25px;position:relative}.recipe-detail-top{display:flex;gap:18px;align-items:center;padding:12px 0 20px}.recipe-detail-top>span{font-size:64px}.recipe-detail-top h2{margin:5px 0}.recipe-detail-top p{color:#647264}.recipe-ingredient-list,.recipe-steps-list{padding-left:22px;line-height:1.8;color:#526252}.recipe-ingredient-list li{padding:4px 0}.recipe-ingredient-list li b{margin-left:12px;color:#23452f}.recipe-add-cart{width:100%;margin-top:12px}.dukandar-popup-backdrop{background:transparent;pointer-events:none;align-items:flex-end}.dukandar-popup{pointer-events:auto;margin:0 0 82px 0;animation:dukandarPop .22s ease-out}.dukandar-popup-body{max-height:440px;overflow:auto}.dukandar-chat-history{display:grid;gap:9px;max-height:290px;overflow:auto}.dukandar-floating-button{animation:dukandarPulse 2.8s ease-in-out infinite}.dukandar-floating-button span img,.dukandar-popup-avatar img{object-fit:contain;object-position:center}@keyframes dukandarPulse{0%,100%{box-shadow:0 8px 28px #18351f45}50%{box-shadow:0 8px 34px #16834b75}}@keyframes dukandarPop{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
 
 @media(max-width:650px) { .recipe-hero-banner,.hello-kitchen-feature{grid-template-columns:1fr;padding:20px}.recipe-hero-art span{width:66px;height:66px;font-size:36px}.recipe-detail-top{align-items:flex-start}.header-actions { flex-wrap:wrap; } .dukandar-popup-backdrop { padding:0; } .dukandar-popup { width:100%; border-radius:20px 20px 0 0; } .recipe-page { padding:14px; } }
+.dukandar-floating-button{bottom:94px;right:22px;}
+@media(max-width:650px){.dukandar-floating-button{bottom:88px;right:12px;}.floating-cart{bottom:12px;}}
 `}</style>
     <div className="app-shell">
       {!supabaseReady && <div className="top-strip">Setup required: configure Supabase environment variables before accepting live orders.</div>}
@@ -654,6 +859,7 @@ export default function App() {
           <button type="button" onClick={() => setView("recipes")}>📖 Recipe Book</button>
           <button type="button" onClick={() => setDukandarOpen(true)}>✨ Ask Dukandar</button>
           <button onClick={() => { setView("admin"); setAdmin(false); }}>♙ Admin</button>
+          <button type="button" className="account-button" onClick={() => { setView(customerUser ? "account" : "account-auth"); setCustomerAuthMode("login"); }}>{customerUser ? "👤 My Account" : "👤 Login / Sign up"}</button>
           <button className="cart-button" onClick={() => setCheckout(true)}>🛒 Cart <b>{totalCartCount}</b></button>
         </div>
       </header>
@@ -714,6 +920,27 @@ export default function App() {
       </main>}
       {activeRecipe && <div className="modal-backdrop recipe-detail-backdrop" onClick={()=>setActiveRecipe(null)}><section className="recipe-detail-modal" role="dialog" aria-modal="true" aria-label={`${activeRecipe.name} recipe`} onClick={e=>e.stopPropagation()}><button className="modal-close" onClick={()=>setActiveRecipe(null)}>✕</button><div className="recipe-detail-top"><span>{activeRecipe.emoji}</span><div><span className="eyebrow">{activeRecipe.cuisine} · {activeRecipe.time}</span><h2>{activeRecipe.name}</h2><p>{activeRecipe.description}</p></div></div><h3>Ingredients</h3><ul className="recipe-ingredient-list">{activeRecipe.ingredients.map((item,i)=><li key={i}><span>{item[0]}</span><b>{item[1]}</b></li>)}</ul><h3>How to make it</h3><ol className="recipe-steps-list">{activeRecipe.steps.map((step,i)=><li key={i}>{step}</li>)}</ol><button className="primary-button recipe-add-cart" onClick={()=>addRecipeToCart(activeRecipe)}>Add all ingredients to cart</button></section></div>}
 
+      {view === "account-auth" && <main className="admin-page">
+        <form className="login-card customer-login-card" onSubmit={submitCustomerAuth}>
+          <div className="login-icon">👤</div><span className="eyebrow">BALAJI HOME NEEDS CUSTOMER ACCOUNT</span>
+          <h2>{customerAuthMode === "signup" ? "Create your account" : "Customer login"}</h2>
+          <p>{customerAuthMode === "signup" ? "Save your details and view your previous grocery requests." : "Log in to access your saved address and order history."}</p>
+          {customerAuthMode === "signup" && <><input value={customerAuthForm.name} onChange={e => setCustomerAuthForm({ ...customerAuthForm, name: e.target.value })} placeholder="Full name" autoComplete="name" required /><input value={customerAuthForm.phone} onChange={e => setCustomerAuthForm({ ...customerAuthForm, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })} placeholder="10-digit mobile number" inputMode="numeric" autoComplete="tel" required /></>}
+          <input type="email" value={customerAuthForm.email} onChange={e => setCustomerAuthForm({ ...customerAuthForm, email: e.target.value })} placeholder="Email address" autoComplete="email" required />
+          <input type="password" value={customerAuthForm.password} onChange={e => setCustomerAuthForm({ ...customerAuthForm, password: e.target.value })} placeholder="Password (minimum 8 characters)" autoComplete={customerAuthMode === "signup" ? "new-password" : "current-password"} minLength={8} required />
+          <button className="primary-button" disabled={customerAuthBusy}>{customerAuthBusy ? "Please wait…" : customerAuthMode === "signup" ? "Create free account" : "Login"}</button>
+          <button type="button" className="back-button" onClick={() => setCustomerAuthMode(customerAuthMode === "signup" ? "login" : "signup")}>{customerAuthMode === "signup" ? "Already registered? Login" : "New customer? Create an account"}</button>
+          <button type="button" className="back-button" onClick={() => setView("shop")}>Continue as guest · Back to store</button>
+          <small className="delivery-note">Free email and password login. Email verification may be required. Guest checkout is always available.</small>
+        </form>
+      </main>}
+
+      {view === "account" && <main className="admin-page">
+        <div className="admin-heading"><div><span className="eyebrow">CUSTOMER ACCOUNT</span><h1>My Account</h1><p>{customerUser?.email}</p></div><div className="account-actions"><button className="back-button" onClick={() => setView("shop")}>← Continue shopping</button><button className="delete-order-button" onClick={customerLogout}>Logout</button></div></div>
+        <section className="panel customer-profile-panel"><h2>My details & delivery address</h2><form className="customer-form" onSubmit={saveCustomerProfile}><input value={customerProfile.full_name} onChange={e => setCustomerProfile({ ...customerProfile, full_name: e.target.value })} placeholder="Full name" required /><input value={customerProfile.phone} onChange={e => setCustomerProfile({ ...customerProfile, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })} placeholder="10-digit mobile number" inputMode="numeric" required /><textarea value={customerProfile.address} onChange={e => setCustomerProfile({ ...customerProfile, address: e.target.value })} placeholder="Saved delivery address" /><button className="primary-button">Save my details</button></form></section>
+        <section className="panel"><div className="section-heading"><h2>My previous orders</h2><span>{customerOrders.length} orders</span></div>{customerOrders.length ? customerOrders.map(order => <div className="order-card" key={order.id}><div className="order-top"><b>{order.id}</b><span>{order.date || "—"}</span><strong>{order.status || "Order Received"}</strong></div><p>{order.customer?.address || "Address not saved"}</p><div className="order-lines">{(order.items || []).map(item => <div key={item.id}>{item.name} × {item.quantity} {item.purchaseUnit || item.unit || ""}</div>)}{(order.customItems || []).map((item, index) => <div key={`${item.name}-${index}`}>Other: {item.name} — {item.quantity || 1} × {item.purchaseUnit || "item"}</div>)}</div></div>) : <p className="empty">No orders yet. Orders placed while logged in will appear here.</p>}</section>
+      </main>}
+
       {view === "admin" && <main className="admin-page">
         {!admin ? <form className="login-card" onSubmit={login}><div className="login-icon">🔐</div><h2>Store Admin</h2><p>Sign in using your authorised admin email and password.</p><input type="email" value={adminEmail} onChange={e => setAdminEmail(e.target.value)} placeholder="Admin email" required /><input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} placeholder="Admin password" autoComplete="current-password" required /><button className="primary-button">Login</button>{authMessage && <p className="delivery-note">{authMessage}</p>}<button type="button" className="back-button" onClick={() => setView("shop")}>← Back to store</button></form> :
           <>
@@ -732,7 +959,7 @@ export default function App() {
               {orders.filter(o => orderFilter === "All" || o.status === orderFilter).map(o => <div className="order-card" key={o.id}>
                 <div className="order-top"><b>{o.id}</b><span>{o.date}</span><strong>{o.status}</strong></div>
                 <p><b>{o.customer.name}</b> · <a href={`tel:${o.customer.phone}`}>{o.customer.phone}</a></p><p>{o.customer.address}</p>
-                {o.deliveryLocation && <p className="admin-location">📍 Customer GPS: {o.deliveryLocation.latitude.toFixed(6)}, {o.deliveryLocation.longitude.toFixed(6)} · Accuracy ±{o.deliveryLocation.accuracy} m · <a href={`https://www.google.com/maps?q=${o.deliveryLocation.latitude},${o.deliveryLocation.longitude}`} target="_blank" rel="noreferrer">Open delivery location in Google Maps ↗</a></p>}
+                {o.deliveryLocation ? <p className="admin-location">📍 Customer GPS: {o.deliveryLocation.latitude.toFixed(6)}, {o.deliveryLocation.longitude.toFixed(6)} · Accuracy ±{o.deliveryLocation.accuracy} m · <a href={`https://www.google.com/maps?q=${o.deliveryLocation.latitude},${o.deliveryLocation.longitude}`} target="_blank" rel="noreferrer">Open delivery location in Google Maps ↗</a></p> : <p className="delivery-note" style={{background:"#fff7e6",padding:10,borderRadius:8}}>⚠️ Customer did not share GPS. Verify the manually entered address and 3 km delivery eligibility before confirming.</p>}
                 <h4>Requested products — enter your estimate prices</h4>
                 {(o.items || []).map((item, idx) => <div className="manage-product" key={item.id}><span><b>{item.name}</b><br/><small>Customer buying: {item.quantity || 1} × {item.purchaseUnit || item.unit || "item"}</small>{item.recipeNeed && <><br/><small>Recipe requires: {item.recipeNeed}</small></>}</span><label>₹ <input aria-label={`Price for ${item.name}`} type="number" min="0" step="0.01" placeholder="Enter price" value={item.quotedPrice ?? ""} onChange={e => updateItemQuote(o.id, idx, e.target.value)} style={{width:120}} /></label></div>)}
                 {(o.customItems || []).map((item, idx) => <div className="manage-product" key={`${item.name}-${idx}`}><span><b>Other: {item.name}</b><br/><small>Customer buying: {item.quantity || 1} × {item.purchaseUnit || "item"}</small>{item.recipeNeed && <><br/><small>Recipe requires: {item.recipeNeed}</small></>}</span><label>₹ <input aria-label={`Price for ${item.name}`} type="number" min="0" step="0.01" placeholder="Enter price" value={item.quotedPrice ?? ""} onChange={e => updateItemQuote(o.id, idx, e.target.value, true)} style={{width:120}} /></label></div>)}
@@ -770,13 +997,14 @@ export default function App() {
             <div className="quantity"><button onClick={() => changeQty(p.id,-1)}>−</button><b>{cart[p.id]}</b><button onClick={() => changeQty(p.id,1)}>+</button></div></div>)}</div>
           {customItems.length > 0 && <div><b>Other requested items:</b>{customItems.map((item,i) => <p key={`${item.name}-${i}`}>• {item.name} — buying {item.quantity} × {item.purchaseUnit || "item"}{item.recipeNeed ? `; recipe needs ${item.recipeNeed}` : ""} <button type="button" onClick={() => setCustomItems(old => old.filter((_,idx)=>idx!==i))}>Remove</button></p>)}</div>}
           <p className="delivery-note">The store will check availability, add prices and send you an estimate on WhatsApp. Delivery is arranged only after you confirm.</p>
-          <form className="customer-form" onSubmit={submitOrder}><h3>Your details</h3><input required placeholder="Your full name" value={customer.name} onChange={e=>setCustomer({...customer,name:e.target.value})}/><input required type="tel" maxLength="10" placeholder="10-digit WhatsApp mobile number" value={customer.phone} onChange={e=>setCustomer({...customer,phone:e.target.value.replace(/\D/g,"")})}/><textarea required placeholder="Full delivery address" value={customer.address} onChange={e=>setCustomer({...customer,address:e.target.value})}/>
-            <div className="location-picker"><div><b>Share delivery location (optional)</b><p>Allow location access to help the store find your delivery address.</p></div><button type="button" className="location-button" onClick={captureLocation}>📍 {deliveryLocation ? "Update location" : "Use my current location"}</button>
-              {locationMessage && <small style={{display:"block",marginTop:8,color:deliveryBlocked?"#b42318":undefined}}>{locationMessage}</small>}
-              {deliveryLocation && <div className="location-confirmed">✓ GPS location checked · {deliveryDistanceKm?.toFixed(2)} km from store · <a href={`https://www.google.com/maps?q=${deliveryLocation.latitude},${deliveryLocation.longitude}`} target="_blank" rel="noreferrer">Preview on map</a> <button type="button" onClick={()=>{setDeliveryLocation(null);setDeliveryDistanceKm(null);setDeliveryBlocked(false);setLocationMessage("Location removed. Share your location again to verify delivery.");}}>Remove</button></div>}
-              <small style={{display:"block",marginTop:6}}>Delivery is currently available only within 3 km of Balaji Home Needs.</small>
+          <form className="customer-form" onSubmit={submitOrder}><h3>Your details</h3>{!customerUser && <p className="delivery-note">Guest checkout is available. <button type="button" className="inline-link" onClick={() => { setCheckout(false); setView("account-auth"); }}>Create a free account</button> to save your details and view order history.</p>}<input required placeholder="Your full name" value={customer.name} onChange={e=>setCustomer({...customer,name:e.target.value})}/><input required type="tel" maxLength="10" placeholder="10-digit WhatsApp mobile number" value={customer.phone} onChange={e=>setCustomer({...customer,phone:e.target.value.replace(/\D/g,"")})}/><textarea required placeholder="Full delivery address (house/flat, street, area, landmark, PIN code)" value={customer.address} onChange={e=>setCustomer({...customer,address:e.target.value})}/>
+            <div className="location-picker"><div><b>Share delivery location (recommended)</b><p>Capture your map location to automatically fill your address and help us confirm delivery accurately.</p></div><button type="button" className="location-button" onClick={captureLocation}>📍 {deliveryLocation ? "Update location" : "Use my current location"}</button>
+              {!deliveryLocation && <div style={{marginTop:10,padding:12,borderRadius:9,background:"#fff7e6",border:"1px solid #f2d49b",color:"#79520b"}}><b>⚠️ Please update your location for accurate delivery.</b><p style={{margin:"5px 0 0",fontSize:13}}>You can still place your order without GPS. If you skip location, enter your complete address manually. Delivery distance and availability will need to be checked by our store, so delivery may be less accurate or take longer to confirm.</p></div>}
+              {locationMessage && <small style={{display:"block",marginTop:8,color:deliveryBlocked?"#b42318":undefined}}>{addressResolving ? "Finding and filling your address… " : ""}{locationMessage}</small>}
+              {deliveryLocation && <div className="location-confirmed">✓ GPS location checked · {deliveryDistanceKm?.toFixed(2)} km from store · ±{deliveryLocation.accuracy} m accuracy · <a href={`https://www.google.com/maps?q=${deliveryLocation.latitude},${deliveryLocation.longitude}`} target="_blank" rel="noreferrer">Preview on map</a> <button type="button" onClick={()=>{setDeliveryLocation(null);setDeliveryDistanceKm(null);setDeliveryBlocked(false);setLocationMessage("GPS location removed. You can continue using your manually entered address.");}}>Remove</button></div>}
+              <small style={{display:"block",marginTop:6}}>Delivery is currently available within 3 km of Balaji Home Needs. Orders without GPS can still be submitted, but the store must verify the address manually.</small>
             </div>
-            <button className="primary-button" type="submit" disabled={!deliveryLocation || deliveryBlocked || deliveryDistanceKm > DELIVERY_RADIUS_KM} style={{opacity:(!deliveryLocation || deliveryBlocked || deliveryDistanceKm > DELIVERY_RADIUS_KM)?0.55:1,cursor:(!deliveryLocation || deliveryBlocked || deliveryDistanceKm > DELIVERY_RADIUS_KM)?"not-allowed":"pointer"}}>Send order for estimate</button></form>
+            <button className="primary-button" type="submit" disabled={deliveryBlocked || (deliveryLocation && deliveryDistanceKm > DELIVERY_RADIUS_KM)} style={{opacity:(deliveryBlocked || (deliveryLocation && deliveryDistanceKm > DELIVERY_RADIUS_KM))?0.55:1,cursor:(deliveryBlocked || (deliveryLocation && deliveryDistanceKm > DELIVERY_RADIUS_KM))?"not-allowed":"pointer"}}>Send order for estimate</button></form>
         </>}
       </div></div>}
       {deliveryBlocked && <div className="modal-backdrop" role="dialog" aria-modal="true"><div className="checkout-modal" style={{maxWidth:480,textAlign:"center",padding:28}}><div style={{fontSize:46,marginBottom:10}}>💚</div><span className="eyebrow">BALAJI HOME NEEDS</span><h2>We're working hard to reach you!</h2><p>Thank you for choosing Balaji Home Needs. We currently deliver within 3 km of our store. Your location is approximately <b>{deliveryDistanceKm?.toFixed(2)} km</b> away, so delivery is not available there just yet.</p><p>We're working hard to expand our delivery service and hope to serve you soon!</p><button type="button" className="primary-button" style={{width:"100%"}} onClick={()=>{setDeliveryBlocked(false);setCheckout(false);}}>Okay, thank you</button></div></div>}
