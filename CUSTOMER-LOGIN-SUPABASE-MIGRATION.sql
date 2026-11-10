@@ -53,3 +53,8 @@ grant select on public.orders to authenticated;
 grant insert on public.orders to anon, authenticated;
 
 -- Keep the existing admin-only order update policy from supabase-setup.sql.
+
+-- Saved registration delivery coordinates (GPS)
+alter table public.customer_profiles
+  add column if not exists latitude double precision,
+  add column if not exists longitude double precision;

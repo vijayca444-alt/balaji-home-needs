@@ -225,7 +225,7 @@ export default function App() {
   const [submittedOrderId, setSubmittedOrderId] = useState("");
   const [customer, setCustomer] = useState({ name: "", phone: "", address: "" });
   const [customerUser, setCustomerUser] = useState(null);
-  const [customerProfile, setCustomerProfile] = useState({ full_name: "", username: "", phone: "", address: "", must_change_password: false });
+  const [customerProfile, setCustomerProfile] = useState({ full_name: "", username: "", phone: "", address: "", latitude: null, longitude: null, must_change_password: false });
   const [mustChangeCustomerPassword, setMustChangeCustomerPassword] = useState(false);
   const [newCustomerPassword, setNewCustomerPassword] = useState("");
   const [confirmCustomerPassword, setConfirmCustomerPassword] = useState("");
@@ -236,6 +236,8 @@ export default function App() {
   const [customerAuthMode, setCustomerAuthMode] = useState("login");
   const [customerAuthForm, setCustomerAuthForm] = useState({ name: "", username: "", phone: "", email: "", identifier: "", password: "" });
   const [customerAuthBusy, setCustomerAuthBusy] = useState(false);
+  const [signupLocation, setSignupLocation] = useState(null);
+  const [signupLocationMessage, setSignupLocationMessage] = useState("");
   const [customItem, setCustomItem] = useState("");
   const [customQty, setCustomQty] = useState("1");
   const [customUnit, setCustomUnit] = useState("500 g");
@@ -302,7 +304,7 @@ export default function App() {
     let alive = true;
     (async () => {
       const { data: profile, error: profileError } = await supabase.from("customer_profiles")
-        .select("full_name,username,phone,address,must_change_password").eq("id", customerUser.id).maybeSingle();
+        .select("full_name,username,phone,address,latitude,longitude,must_change_password").eq("id", customerUser.id).maybeSingle();
       if (!alive) return;
       let savedProfile = profile;
       if (!savedProfile) {
@@ -311,6 +313,7 @@ export default function App() {
           username: customerUser.user_metadata?.username || "",
           phone: customerUser.user_metadata?.phone || "",
           address: "",
+          latitude: null, longitude: null,
           must_change_password: false
         };
         const { error: createError } = await supabase.from("customer_profiles").upsert({
@@ -405,9 +408,11 @@ export default function App() {
       };
       const distance = distanceInKm(STORE_LOCATION, location);
       setDeliveryLocation(location);
+      if (customerAuthMode === "signup") { setSignupLocation(location); setSignupLocationMessage(`Location captured (±${location.accuracy} m). Looking up your address…`); }
       setDeliveryDistanceKm(distance);
       const outside = distance > DELIVERY_RADIUS_KM;
       setDeliveryBlocked(outside);
+      if (customerAuthMode === "signup") setSignupLocationMessage(outside ? `Location is ${distance.toFixed(2)} km from the store, outside the 3 km delivery area.` : `Location checked: ${distance.toFixed(2)} km from the store.`);
       setLocationMessage(outside
         ? `Your location is approximately ${distance.toFixed(2)} km from our store, outside our 3 km delivery area. GPS accuracy: ±${location.accuracy} m.`
         : `Location checked: approximately ${distance.toFixed(2)} km from our store (GPS accuracy ±${location.accuracy} m). ${timedOut ? "Using the best location found." : "Your location is within our delivery area."} Finding your address…`);
@@ -422,6 +427,11 @@ export default function App() {
         .then(result => {
           const resolvedAddress = result?.display_name;
           if (resolvedAddress) {
+            if (customerAuthMode === "signup") {
+              setCustomerAuthForm(previous => ({ ...previous, address: previous.address?.trim() ? previous.address : resolvedAddress }));
+              setSignupLocationMessage(`Address found: ${resolvedAddress}`);
+            }
+            if (customerUser?.id && view === "account") setCustomerProfile(previous => ({ ...previous, address: previous.address?.trim() ? previous.address : resolvedAddress, latitude: location.latitude, longitude: location.longitude }));
             setCustomer(previous => previous.address.trim() ? previous : { ...previous, address: resolvedAddress });
             setLocationMessage(outside
               ? `Address found and added. Your location is approximately ${distance.toFixed(2)} km from our store, outside our 3 km delivery area.`
@@ -648,8 +658,8 @@ export default function App() {
     const password = customerAuthForm.password;
     if (password.length < 8) { showNotice("Please use a password with at least 8 characters."); return; }
     if (customerAuthMode === "signup") {
-      if (!customerAuthForm.name.trim() || !/^[6-9]\d{9}$/.test(customerAuthForm.phone)) {
-        showNotice("Enter your name and a valid 10-digit Indian mobile number."); return;
+      if (!customerAuthForm.name.trim() || !/^[6-9]\d{9}$/.test(customerAuthForm.phone) || !customerAuthForm.address?.trim()) {
+        showNotice("Enter your name, valid 10-digit mobile number and delivery address. You can use GPS or type it manually."); return;
       }
       if (!/^[a-z0-9_]{3,20}$/.test(username)) {
         showNotice("Choose a username with 3–20 letters, numbers or underscores."); return;
@@ -672,7 +682,7 @@ export default function App() {
         if (!data.session || !data.user) {
           throw new Error("Email confirmation is still enabled in Supabase. Turn OFF Confirm email in Authentication settings, then try again.");
         }
-        const profile = { id: data.user.id, full_name: customerAuthForm.name.trim(), username, phone: customerAuthForm.phone, address: "", must_change_password: false, updated_at: new Date().toISOString() };
+        const profile = { id: data.user.id, full_name: customerAuthForm.name.trim(), username, phone: customerAuthForm.phone, address: customerAuthForm.address.trim(), latitude: signupLocation?.latitude ?? null, longitude: signupLocation?.longitude ?? null, must_change_password: false, updated_at: new Date().toISOString() };
         const { error: profileError } = await supabase.from("customer_profiles").upsert(profile);
         if (profileError) {
           await supabase.auth.signOut();
@@ -680,9 +690,10 @@ export default function App() {
           throw profileError;
         }
         setCustomerProfile(profile);
-        setCustomer({ name: profile.full_name, phone: profile.phone, address: "" });
+        setCustomer({ name: profile.full_name, phone: profile.phone, address: profile.address });
         setCustomerUser(data.user);
-        setCustomerAuthForm({ name: "", username: "", phone: "", email: "", identifier: "", password: "" });
+        setCustomerAuthForm({ name: "", username: "", phone: "", email: "", identifier: "", password: "", address: "" });
+        setSignupLocation(null); setSignupLocationMessage("");
         setView("account");
         showNotice("Your account is ready. Welcome to Balaji Home Needs!");
       } else {
@@ -743,6 +754,7 @@ export default function App() {
       username: customerProfile.username || customerUser.user_metadata?.username || "",
       phone: customerProfile.phone,
       address: customerProfile.address.trim(),
+      latitude: deliveryLocation?.latitude ?? customerProfile.latitude ?? null, longitude: deliveryLocation?.longitude ?? customerProfile.longitude ?? null,
       updated_at: new Date().toISOString()
     };
     const { error } = await supabase.from("customer_profiles").update(profile).eq("id", customerUser.id);
@@ -847,6 +859,27 @@ export default function App() {
     updateOrder(order.id, { total, status: "Estimate Sent", estimateSentAt: new Date().toLocaleString("en-IN") });
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
   }
+  function createInvoice(order) {
+    const items = [...(order.items || []), ...(order.customItems || [])];
+    if (!items.length || items.some(item => item.quotedPrice === "" || item.quotedPrice == null)) { showNotice("Enter all item prices and save the estimate before creating the invoice."); return; }
+    const invoice = { number: `BHN-INV-${String(order.id).replace(/[^0-9]/g, "").slice(-8)}`, date: new Date().toISOString(), total: getEstimate(order), items: items.map(item => ({ name:item.name, quantity:item.quantity || 1, unit:item.purchaseUnit || item.unit || "item", unitPrice:Number(item.quotedPrice), lineTotal:Number(item.quotedPrice) * (item.quantity || 1) })) };
+    updateOrder(order.id, { invoice, status: "Delivered", deliveredAt: new Date().toLocaleString("en-IN") });
+    showNotice("Invoice generated and published to the customer account.");
+  }
+  function shareInvoice(order) {
+    if (!order.invoice) return;
+    const lines = order.invoice.items.map(item => `${item.name} — ${item.quantity} × ${item.unit} @ ${money(item.unitPrice)} = ${money(item.lineTotal)}`).join("\n");
+    const message = `BALAJI HOME NEEDS\nInvoice: ${order.invoice.number}\nOrder: ${order.id}\nCustomer: ${order.customer?.name || "Customer"}\n\n${lines}\n\nTotal: ${money(order.invoice.total)}\nThank you for shopping with us!`;
+    const phone = `91${String(order.customer?.phone || "").replace(/\D/g, "").slice(-10)}`;
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
+  }
+  function printInvoice(order) {
+    const invoice = order.invoice; if (!invoice) return;
+    const rows = invoice.items.map(item => `<tr><td>${String(item.name).replace(/[&<>]/g, "")}</td><td>${item.quantity} ${item.unit}</td><td>₹${Number(item.unitPrice).toFixed(2)}</td><td>₹${Number(item.lineTotal).toFixed(2)}</td></tr>`).join("");
+    const w = window.open("", "_blank"); if (!w) { showNotice("Allow pop-ups to print the invoice."); return; }
+    w.document.write(`<!doctype html><html><head><title>${invoice.number}</title><style>body{font:14px Arial;padding:32px;color:#172417}h1{color:#285b32}table{width:100%;border-collapse:collapse;margin-top:24px}th,td{border:1px solid #ccc;padding:10px;text-align:left}.total{text-align:right;font-size:20px;font-weight:bold;margin-top:20px}</style></head><body><h1>BALAJI HOME NEEDS</h1><h2>Invoice ${invoice.number}</h2><p>Order: ${order.id}<br>Date: ${new Date(invoice.date).toLocaleDateString("en-IN")}<br>Customer: ${String(order.customer?.name || "").replace(/[&<>]/g, "")}<br>Mobile: ${String(order.customer?.phone || "")}<br>Address: ${String(order.customer?.address || "").replace(/[&<>]/g, "")}</p><table><thead><tr><th>Item</th><th>Quantity</th><th>Unit price</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table><div class="total">Total: ₹${Number(invoice.total).toFixed(2)}</div><p>Thank you for shopping with us.</p><script>window.onload=()=>window.print()</script></body></html>`); w.document.close();
+  }
+
   function moveOrderToDeleted(order) {
     if (!window.confirm(`Move order ${order.id} to Deleted Orders?`)) return;
     setOrders(old => old.filter(o => o.id !== order.id));
@@ -926,8 +959,9 @@ export default function App() {
           <button type="button" onClick={() => setView("shop")}>Shop</button>
           <button type="button" onClick={() => setView("recipes")}>📖 Recipe Book</button>
           <button type="button" onClick={() => setDukandarOpen(true)}>✨ Ask Dukandar</button>
-          <button onClick={() => { setView("admin"); setAdmin(false); }}>♙ Admin</button>
-          <button type="button" className="account-button" onClick={() => { setView(customerUser ? "account" : "account-auth"); setCustomerAuthMode("login"); }}>{customerUser ? "👤 My Account" : "👤 Login / Sign up"}</button>
+          <button type="button" onClick={async () => { const url=window.location.origin; if(navigator.share) { try { await navigator.share({title:"Balaji Home Needs",text:"Shop everyday groceries with Balaji Home Needs",url}); } catch {} } else { await navigator.clipboard?.writeText(url); showNotice("App link copied. Share it with customers on WhatsApp."); } }}>↗ Share App</button>
+          <button onClick={() => setView("login-hub")}>♙ Login</button>
+          <button type="button" className="account-button" onClick={() => { setView(customerUser ? "account" : "login-hub"); setCustomerAuthMode("login"); }}>{customerUser ? "👤 My Account" : "👤 Login / Sign up"}</button>
           <button className="cart-button" onClick={() => setCheckout(true)}>🛒 Cart <b>{totalCartCount}</b></button>
         </div>
       </header>
@@ -966,7 +1000,7 @@ export default function App() {
         <section className="products-section" id="products">
           <div className="section-heading"><div><span className="eyebrow">ADD WHAT YOU NEED</span><h2>{category === "All" ? "Browse all products" : category}</h2></div><span>{filteredProducts.length} items</span></div>
           <div className="product-grid">{filteredProducts.map(p => { const quantityOptions = getQuantityOptions(p); const selectedUnit = (productManualUnits[p.id] || "").trim() ? (p.unit || quantityOptions[0]) : (cartPurchaseUnits[p.id] || p.unit || quantityOptions[0]); return <article className="product-card" key={p.id}>
-            <div className="product-picture"><img src={productPhotoUrl(p)} alt={`Real photo of ${p.name}`} loading="lazy" onError={e => { e.currentTarget.style.display = "none"; e.currentTarget.parentElement.classList.add("photo-unavailable"); }} /><span className="photo-unavailable-label">Photo unavailable</span></div><div className="product-info"><small>{p.category}</small><h3>{p.name}</h3><p>{p.unit}</p>
+            <div className="product-picture"><img src={productPhotoUrl(p)} alt={`Real photo of ${p.name}`} loading="lazy" onError={e => { e.currentTarget.style.display = "none"; e.currentTarget.parentElement.classList.add("photo-unavailable"); }} /><span className="photo-unavailable-label">Photo unavailable</span></div><div className="product-info"><small>{p.category}</small><h3>{p.name}</h3><p>{p.unit}</p>{Number(p.price) > 0 && <p className="product-price">₹{Number(p.price).toFixed(2)} / {p.unit || "unit"} <small>Estimated price</small></p>}
               <div className="product-quantity-options"><label>Choose quantity<select aria-label={`Choose quantity for ${p.name}`} value={selectedUnit} onChange={e => { setProductManualUnits(old => ({...old,[p.id]:""})); setCartPurchaseUnits(old => ({...old,[p.id]:e.target.value})); }}>{Array.from(new Set([p.unit, ...quantityOptions].filter(Boolean))).map(option => <option key={option} value={option}>{option}</option>)}</select></label><label>Or enter manually<input aria-label={`Enter custom quantity for ${p.name}`} type="text" inputMode="text" placeholder="e.g. 150 g" value={productManualUnits[p.id] || ""} onChange={e => { const value = e.target.value; setProductManualUnits(old => ({...old,[p.id]:value})); if (value.trim()) setCartPurchaseUnits(old => ({...old,[p.id]:value.trim()})); else setCartPurchaseUnits(old => ({...old,[p.id]:p.unit || quantityOptions[0]})); }} /></label></div>
               <div className="product-bottom"><b>Add to cart</b>{cart[p.id] ? <div className="quantity"><button onClick={() => changeQty(p.id, -1)}>−</button><b>{cart[p.id]}</b><button onClick={() => changeQty(p.id, 1)}>+</button></div> : <button className="add-button" onClick={() => changeQty(p.id, 1)}>＋ Add</button>}</div>
             </div></article>})}</div>
@@ -988,6 +1022,7 @@ export default function App() {
       </main>}
       {activeRecipe && <div className="modal-backdrop recipe-detail-backdrop" onClick={()=>setActiveRecipe(null)}><section className="recipe-detail-modal" role="dialog" aria-modal="true" aria-label={`${activeRecipe.name} recipe`} onClick={e=>e.stopPropagation()}><button className="modal-close" onClick={()=>setActiveRecipe(null)}>✕</button><div className="recipe-detail-top"><span>{activeRecipe.emoji}</span><div><span className="eyebrow">{activeRecipe.cuisine} · {activeRecipe.time}</span><h2>{activeRecipe.name}</h2><p>{activeRecipe.description}</p></div></div><h3>Ingredients</h3><ul className="recipe-ingredient-list">{activeRecipe.ingredients.map((item,i)=><li key={i}><span>{item[0]}</span><b>{item[1]}</b></li>)}</ul><h3>How to make it</h3><ol className="recipe-steps-list">{activeRecipe.steps.map((step,i)=><li key={i}>{step}</li>)}</ol><button className="primary-button recipe-add-cart" onClick={()=>addRecipeToCart(activeRecipe)}>Add all ingredients to cart</button></section></div>}
 
+      {view === "login-hub" && <main className="admin-page"><section className="login-card"><div className="login-icon">👤</div><h2>Welcome to Balaji Home Needs</h2><p>Choose how you want to continue.</p><button className="primary-button" type="button" onClick={() => {setCustomerAuthMode("login");setView("account-auth");}}>Customer Login / Sign up</button><button className="back-button" type="button" onClick={() => {setAdmin(false);setView("admin");}}>Admin Login</button><button className="back-button" type="button" onClick={() => setView("shop")}>Continue as guest</button></section></main>}
       {view === "account-auth" && <main className="admin-page">
         <form className="login-card customer-login-card" onSubmit={submitCustomerAuth}>
           <div className="login-icon">👤</div><span className="eyebrow">BALAJI HOME NEEDS CUSTOMER ACCOUNT</span>
@@ -998,6 +1033,7 @@ export default function App() {
             <input value={customerAuthForm.username} onChange={e => setCustomerAuthForm({ ...customerAuthForm, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20) })} placeholder="Username (3–20 letters, numbers or _)" autoComplete="username" required />
             <input value={customerAuthForm.phone} onChange={e => setCustomerAuthForm({ ...customerAuthForm, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })} placeholder="10-digit mobile number" inputMode="numeric" autoComplete="tel" required />
             <input type="email" value={customerAuthForm.email} onChange={e => setCustomerAuthForm({ ...customerAuthForm, email: e.target.value })} placeholder="Email address" autoComplete="email" required />
+            <div className="location-picker"><b>Delivery address</b><p>Select your current location to fill your address automatically, or type it below.</p><button type="button" className="location-button" onClick={() => { setCustomerAuthForm(old => ({...old, address: ""})); setSignupLocation(null); setSignupLocationMessage("Finding your location…"); captureLocation(); }}>📍 Use my current location</button><textarea value={customerAuthForm.address || ""} onChange={e => setCustomerAuthForm(old => ({...old, address:e.target.value}))} placeholder="House / flat, street, area, landmark, PIN code" required />{signupLocationMessage && <small>{signupLocationMessage}</small>}{signupLocation && <small>GPS: {signupLocation.latitude.toFixed(6)}, {signupLocation.longitude.toFixed(6)} · ±{signupLocation.accuracy} m</small>}</div>
           </>}
           {customerAuthMode === "login" && <input value={customerAuthForm.identifier} onChange={e => setCustomerAuthForm({ ...customerAuthForm, identifier: e.target.value })} placeholder="Username or email address" autoComplete="username" required />}
           <input type="password" value={customerAuthForm.password} onChange={e => setCustomerAuthForm({ ...customerAuthForm, password: e.target.value })} placeholder="Password (minimum 8 characters)" autoComplete={customerAuthMode === "signup" ? "new-password" : "current-password"} minLength={8} required />
@@ -1012,8 +1048,8 @@ export default function App() {
       {view === "account" && <main className="admin-page">
         <div className="admin-heading"><div><span className="eyebrow">CUSTOMER ACCOUNT</span><h1>My Account</h1><p>@{customerProfile.username || customerUser?.user_metadata?.username || customerUser?.email}</p></div><div className="account-actions"><button className="back-button" onClick={() => setView("shop")}>← Continue shopping</button><button className="delete-order-button" onClick={customerLogout}>Logout</button></div></div>
         {mustChangeCustomerPassword && <section className="panel customer-profile-panel" style={{border:"2px solid #e3b341",background:"#fffaf0"}}><h2>Set your new password</h2><p>You are using a temporary password issued by the store. Please create a new password before continuing.</p><form className="customer-form" onSubmit={changeTemporaryCustomerPassword}><input type="password" minLength={8} autoComplete="new-password" value={newCustomerPassword} onChange={e=>setNewCustomerPassword(e.target.value)} placeholder="New password (at least 8 characters)" required /><input type="password" minLength={8} autoComplete="new-password" value={confirmCustomerPassword} onChange={e=>setConfirmCustomerPassword(e.target.value)} placeholder="Confirm new password" required /><button className="primary-button">Update password</button></form></section>}
-        <section className="panel customer-profile-panel"><h2>My details & delivery address</h2><form className="customer-form" onSubmit={saveCustomerProfile}><input value={customerProfile.full_name} onChange={e => setCustomerProfile({ ...customerProfile, full_name: e.target.value })} placeholder="Full name" required /><input value={customerProfile.phone} onChange={e => setCustomerProfile({ ...customerProfile, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })} placeholder="10-digit mobile number" inputMode="numeric" required /><textarea value={customerProfile.address} onChange={e => setCustomerProfile({ ...customerProfile, address: e.target.value })} placeholder="Saved delivery address" /><button className="primary-button">Save my details</button></form></section>
-        <section className="panel"><div className="section-heading"><h2>My previous orders</h2><span>{customerOrders.length} orders</span></div>{customerOrders.length ? customerOrders.map(order => <div className="order-card" key={order.id}><div className="order-top"><b>{order.id}</b><span>{order.date || "—"}</span><strong>{order.status || "Order Received"}</strong></div><p>{order.customer?.address || "Address not saved"}</p><div className="order-lines">{(order.items || []).map(item => <div key={item.id}>{item.name} × {item.quantity} {item.purchaseUnit || item.unit || ""}</div>)}{(order.customItems || []).map((item, index) => <div key={`${item.name}-${index}`}>Other: {item.name} — {item.quantity || 1} × {item.purchaseUnit || "item"}</div>)}</div></div>) : <p className="empty">No orders yet. Orders placed while logged in will appear here.</p>}</section>
+        <section className="panel customer-profile-panel"><h2>My details & delivery address</h2><form className="customer-form" onSubmit={saveCustomerProfile}><input value={customerProfile.full_name} onChange={e => setCustomerProfile({ ...customerProfile, full_name: e.target.value })} placeholder="Full name" required /><input value={customerProfile.phone} onChange={e => setCustomerProfile({ ...customerProfile, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })} placeholder="10-digit mobile number" inputMode="numeric" required /><textarea value={customerProfile.address} onChange={e => setCustomerProfile({ ...customerProfile, address: e.target.value })} placeholder="Saved delivery address" /><button type="button" className="location-button" onClick={() => captureLocation()}>📍 Update location and address</button><button className="primary-button">Save my details</button></form></section>
+        <section className="panel"><div className="section-heading"><h2>My previous orders</h2><div style={{display:"flex",gap:8,alignItems:"center"}}><span>{customerOrders.length} orders</span><button type="button" className="back-button" onClick={async()=>{const {data,error}=await supabase.from("orders").select("payload,status,created_at").eq("customer_id",customerUser.id).order("created_at",{ascending:false});if(error)showNotice("Could not refresh orders: "+error.message);else setCustomerOrders((data||[]).map(row=>({...row.payload,status:row.status||row.payload?.status})));}}>Refresh</button></div></div>{customerOrders.length ? customerOrders.map(order => <div className="order-card" key={order.id}><div className="order-top"><b>{order.id}</b><span>{order.date || "—"}</span><strong>{order.status || "Order Received"}</strong></div><p>{order.customer?.address || "Address not saved"}</p><div className="order-lines">{(order.items || []).map(item => <div key={item.id}>{item.name} × {item.quantity} {item.purchaseUnit || item.unit || ""}</div>)}{(order.customItems || []).map((item, index) => <div key={`${item.name}-${index}`}>Other: {item.name} — {item.quantity || 1} × {item.purchaseUnit || "item"}</div>)}</div>{order.invoice && <div className="delivery-note"><b>Invoice {order.invoice.number}</b> · {money(order.invoice.total)}<div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}><button type="button" className="back-button" onClick={() => printInvoice(order)}>Download / Print PDF</button><button type="button" className="primary-button" onClick={() => shareInvoice(order)}>Share on WhatsApp</button></div></div>}</div>) : <p className="empty">No orders yet. Orders placed while logged in will appear here.</p>}</section>
       </main>}
 
       {view === "admin" && <main className="admin-page">
@@ -1041,7 +1077,7 @@ export default function App() {
                 <div className="total-line"><b>Estimate total</b><strong>{money(getEstimate(o))}</strong></div>
                 <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
                   <button className="primary-button" type="button" onClick={() => sendEstimate(o)}>💬 Save estimate & send WhatsApp</button>
-                  <select value={o.status} onChange={e => updateOrder(o.id, {status:e.target.value})}>{statuses.map(s => <option key={s}>{s}</option>)}</select>
+                  <select value={o.status} onChange={e => updateOrder(o.id, {status:e.target.value})}>{statuses.map(s => <option key={s}>{s}</option>)}</select>{o.status === "Delivered" && !o.invoice && <button type="button" className="primary-button" onClick={() => createInvoice(o)}>Generate & Publish Invoice</button>}{o.invoice && <button type="button" className="back-button" onClick={() => printInvoice(o)}>Print / Save Invoice PDF</button>}
                   <button type="button" className="delete-order-button" onClick={() => moveOrderToDeleted(o)}>Move to deleted</button>
                 </div>
                 {o.status === "Estimate Sent" && <p className="delivery-note">Waiting for customer confirmation on WhatsApp. Change status to “Customer Confirmed” only after they agree.</p>}
@@ -1050,12 +1086,12 @@ export default function App() {
             <section className="panel"><div className="section-heading"><h2>Deleted orders ({deletedOrders.length})</h2><button className="back-button" type="button" onClick={() => setShowDeleted(v => !v)}>{showDeleted ? "Hide" : "View deleted orders"}</button></div>
               {showDeleted && (deletedOrders.length ? deletedOrders.map(o => <div className="order-card" key={o.id}><div className="order-top"><b>{o.id}</b><span>Deleted: {o.deletedAt || "—"}</span><strong>{o.status}</strong></div><p>{o.customer?.name} · {o.customer?.phone}</p><div className="deleted-actions"><button className="primary-button" type="button" onClick={() => restoreOrder(o.id)}>Restore order</button><button className="delete-order-button" type="button" onClick={() => permanentlyDeleteOrder(o.id)}>Permanently delete</button></div></div>) : <p className="empty">No deleted orders.</p>)}
             </section>
-            <section className="panel" id="admin-stock"><h2>Manage product catalogue & stock visibility</h2><p className="delivery-note">Add products available in your shop. No prices are shown to customers.</p>
+            <section className="panel" id="admin-stock"><h2>Manage product catalogue & stock visibility</h2><p className="delivery-note">Add products and maintain estimated unit prices. Price changes sync to the customer catalogue when saved.</p>
               <form className="add-product-form" onSubmit={e => { e.preventDefault(); const f = new FormData(e.currentTarget); const name = String(f.get("name")).trim(); if (!name) return; const product = {id:Date.now(),name,category:f.get("category"),unit:f.get("unit") || "Piece",emoji:"🛒",imageUrl:String(f.get("imageUrl") || "").trim()}; setProducts(old => [...old,product]); if (supabaseReady) supabase.from("products").upsert({id:product.id,payload:product}); e.currentTarget.reset(); showNotice("Product added to catalogue."); }}>
                 <input name="name" placeholder="Product name" required /><input name="unit" placeholder="Unit e.g. 1 kg" /><input name="imageUrl" type="url" placeholder="Real product photo URL (optional)" /><select name="category">{categories.slice(1).map(c => <option key={c}>{c}</option>)}</select><button className="primary-button">Add product</button>
               </form>
               <input value={adminProductSearch} onChange={e=>setAdminProductSearch(e.target.value)} placeholder="Search catalogue..." style={{width:"100%",padding:10,margin:"12px 0",border:"1px solid #ccd8c8",borderRadius:9}}/>
-              {products.filter(p=>p.name.toLowerCase().includes(adminProductSearch.toLowerCase())).map(p => <div className="manage-product" key={p.id}><span>{p.emoji} {p.name} · {p.category}<br/><small>{p.paused ? "Paused — hidden from customers" : "Active — visible to customers"}</small></span><div style={{display:"flex",gap:8}}><button type="button" onClick={()=>toggleProductPause(p.id)}>{p.paused ? "Resume stock" : "Pause / Hide"}</button><button onClick={() => {if(window.confirm("Delete this product?")) setProducts(old => old.filter(x => x.id !== p.id));}}>Delete</button></div></div>)}
+              {products.filter(p=>p.name.toLowerCase().includes(adminProductSearch.toLowerCase())).map(p => <div className="manage-product" key={p.id}><span>{p.emoji} {p.name} · {p.category}<br/><small>{p.paused ? "Paused — hidden from customers" : "Active — visible to customers"}</small></span><label>₹ <input aria-label={`Estimated price for ${p.name}`} type="number" min="0" step="0.01" placeholder="Price" value={p.price ?? ""} onChange={e => setProducts(old => old.map(x => x.id === p.id ? {...x, price:e.target.value} : x))} onBlur={e => { const changed={...p,price:e.currentTarget.value}; if(supabaseReady) supabase.from("products").upsert({id:changed.id,payload:changed}).then(({error})=>{if(error)showNotice("Price could not be saved: "+error.message);}); }} style={{width:100}} /></label><div style={{display:"flex",gap:8}}><button type="button" onClick={()=>toggleProductPause(p.id)}>{p.paused ? "Resume stock" : "Pause / Hide"}</button><button onClick={() => {if(window.confirm("Delete this product?")) setProducts(old => old.filter(x => x.id !== p.id));}}>Delete</button></div></div>)}
             </section>
             <section className="panel" id="admin-customers">
               <div className="section-heading"><div><span className="eyebrow">CUSTOMER ACCOUNTS</span><h2>Customers & Password Assistance</h2></div><span>{adminCustomers.length} accounts</span></div>

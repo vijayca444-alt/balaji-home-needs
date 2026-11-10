@@ -1,0 +1,20 @@
+BALAJI HOME NEEDS - CUSTOMER, PRICING AND INVOICE UPDATE
+
+Included in this update:
+- Registration now asks for a delivery address; customers can type it or use the GPS location button to reverse-geocode an address.
+- Registration profile stores GPS latitude/longitude when location is captured.
+- Existing profile address and coordinates can be updated from My Account.
+- Header Login opens a single choice screen for Customer Login/Sign up, Admin Login, or guest shopping.
+- Admin product catalogue includes estimated unit-price fields. Saved prices are stored in the existing products.payload JSON and appear on the customer catalogue.
+- When an order is marked Delivered, Admin can generate and publish an invoice to the customer's order history.
+- Customer order history has a refresh button and invoice print/save-to-PDF and WhatsApp share actions.
+- Share App button uses native share when available, otherwise copies the app URL.
+- Existing guest checkout, customer login, admin login, product catalogue, recipe book, Dukandar and PWA files are retained.
+
+IMPORTANT LIMITATIONS / SETUP:
+- Registration address capture uses browser GPS + OpenStreetMap reverse geocoding. It is not a draggable embedded map pin picker. Customers can type the address if GPS is unavailable.
+- Invoice PDF is generated using the browser print dialog; choose "Save as PDF". It is not a server-generated PDF attachment.
+- Product price is an estimated price per product's base unit (the unit shown on the product). This build does not yet calculate arbitrary custom weights into scaled price totals. Admin must confirm final order line prices in the existing order estimate workflow.
+- After deployment, run the updated CUSTOMER-LOGIN-SUPABASE-MIGRATION.sql in Supabase SQL Editor to add latitude/longitude columns.
+- Existing Edge Functions and secrets remain as previously deployed; this ZIP does not deploy them automatically.
+- Ensure the existing products table permits Admin upsert and customer select under its current RLS policies.
