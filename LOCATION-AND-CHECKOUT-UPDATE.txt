@@ -1,0 +1,14 @@
+BALAJI HOME NEEDS - LOCATION & CHECKOUT UPDATE
+
+Changes in this update:
+1. When a customer shares GPS location, the app attempts to convert latitude/longitude into a readable address using OpenStreetMap Nominatim reverse geocoding.
+2. The resolved address is automatically filled into the Full Delivery Address field if the customer has not already typed an address. Customer-entered text is never overwritten.
+3. GPS location is optional at checkout. Customers can submit an order using a manually entered full address.
+4. If GPS is skipped, customers see a warning explaining that accurate delivery requires precise location and that the store must manually verify the address and delivery distance.
+5. Orders without GPS are marked in the Admin order list so staff can verify the address and 3 km delivery eligibility before confirming.
+6. Existing 3 km delivery-radius validation remains active when a GPS location is supplied.
+
+Important:
+- Reverse geocoding requires an internet connection and uses the OpenStreetMap Nominatim public service. If the lookup fails, customers can type their full address manually.
+- For high-volume commercial use, consider a dedicated geocoding provider/service and comply with its usage policy.
+- The build could not be run in this environment because Vite dependencies were not available locally and package installation timed out. Run `npm.cmd install` then `npm.cmd run build` on Windows before deploying.

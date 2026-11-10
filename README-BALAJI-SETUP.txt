@@ -30,3 +30,9 @@ The Admin screen now uses email + password (no email login link). In Supabase Da
 
 PRODUCT PHOTOS
 83 locally stored product photo files are included under public/products. The homepage banner is public/kirana-shop-banner.png. These assets load locally and do not depend on LoremFlickr.
+
+CUSTOMER LOGIN (FREE EMAIL/PASSWORD)
+- After running supabase-setup.sql, run CUSTOMER-LOGIN-SUPABASE-MIGRATION.sql in Supabase SQL Editor.
+- Follow CUSTOMER-LOGIN-SETUP.txt for Email provider and Site URL configuration.
+- Customer signup/login uses Supabase Auth email + password; no SMS OTP is used.
+- Guest checkout remains available.

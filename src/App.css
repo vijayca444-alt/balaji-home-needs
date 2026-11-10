@@ -53,3 +53,13 @@ input,textarea,select{border:1px solid #dce6da;border-radius:10px;padding:12px 1
 .product-quantity-options select,.product-quantity-options input{width:100%;min-width:0;padding:8px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font-size:12px}
 .product-quantity-options input::placeholder{color:#9aa69a}
 @media(max-width:700px){.product-quantity-options{gap:6px}.product-quantity-options label{font-size:9px}.product-quantity-options select,.product-quantity-options input{font-size:11px;padding:8px 7px}}
+
+/* Free customer accounts */
+.account-button{border:1px solid #dce8d8!important;background:#f7faf5!important;color:#234b31!important;border-radius:9px!important;padding:9px 12px!important;font-weight:800!important}
+.account-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.customer-login-card{max-width:440px}
+.customer-login-card .delivery-note{line-height:1.55}
+.customer-profile-panel{max-width:760px}
+.customer-profile-panel .customer-form{max-width:560px}
+.inline-link{border:0;background:none;padding:0;color:#176b3a;text-decoration:underline;font-weight:800;cursor:pointer}
+@media(max-width:650px){.account-button{font-size:11px!important;padding:8px 9px!important}.account-actions{justify-content:flex-start}.customer-login-card{margin:22px auto}}

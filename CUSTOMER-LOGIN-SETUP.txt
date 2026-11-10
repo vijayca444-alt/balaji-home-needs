@@ -1,0 +1,45 @@
+BALAJI HOME NEEDS — FREE CUSTOMER LOGIN SETUP
+
+WHAT THIS UPDATE ADDS
+- Customer sign-up using name, 10-digit mobile number, email and password.
+- Customer login and logout using Supabase email/password authentication.
+- Customer profile with a saved delivery address.
+- Customer-only order history for orders placed while signed in.
+- Guest checkout remains available; customers do not have to create an account.
+- Existing Admin login and dashboard remain separate.
+- No SMS OTP, paid auth provider or Play Store account is required.
+
+IMPORTANT: ONE-TIME SUPABASE DATABASE MIGRATION
+1. Open your Supabase project dashboard.
+2. Open SQL Editor > New query.
+3. Open CUSTOMER-LOGIN-SUPABASE-MIGRATION.sql from this project.
+4. Copy the complete SQL into the editor and click Run.
+5. Confirm that it completes without an error.
+
+SUPABASE AUTH SETTINGS
+1. Open Authentication > Providers > Email and make sure Email provider is enabled.
+2. Open Authentication > URL Configuration.
+3. Set Site URL to: https://balaji-home-needs.pages.dev
+4. Add these Redirect URLs:
+   https://balaji-home-needs.pages.dev/**
+   http://localhost:5173/**
+5. Email confirmation can remain enabled. After signup, customers should open the confirmation email and then return to log in.
+
+DEPLOY
+1. Keep your existing .env file and Supabase URL/key unchanged.
+2. Build locally with: npm.cmd run build
+3. Publish the updated project to the same GitHub repository connected to Cloudflare Pages.
+4. Wait for Cloudflare Pages deployment to complete.
+5. Test signup, email confirmation, login, profile save, customer order history and guest checkout.
+
+SECURITY NOTES
+- Customer profiles are protected by Row Level Security; each customer can read/update only their own profile.
+- Customers can read only orders whose customer_id matches their own Supabase Auth user ID.
+- Guest orders remain unlinked and cannot be viewed through a customer account.
+- Only the existing admin policy can update order statuses and estimates.
+- Do not put a Supabase service-role key in the website. Keep only the existing publishable/anon key in the frontend.
+
+COST
+- Email/password authentication has no separate per-login charge, subject to your Supabase plan limits.
+- Supabase Free has usage limits. Its default email delivery is rate-limited; for larger public launches, a custom SMTP service may be needed and may have its own pricing.
+- SMS OTP is intentionally not included to avoid SMS costs.
