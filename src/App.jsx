@@ -232,6 +232,7 @@ export default function App() {
   const [adminCustomers, setAdminCustomers] = useState([]);
   const [customerSearch, setCustomerSearch] = useState("");
   const [resetCustomerResult, setResetCustomerResult] = useState(null);
+  const [resetPasswordVisible, setResetPasswordVisible] = useState(true);
   const [customerOrders, setCustomerOrders] = useState([]);
   const [customerAuthMode, setCustomerAuthMode] = useState("login");
   const [customerAuthForm, setCustomerAuthForm] = useState({ name: "", username: "", phone: "", email: "", identifier: "", password: "" });
@@ -246,7 +247,7 @@ export default function App() {
   const [cartRecipeNeeds, setCartRecipeNeeds] = useState({});
   const [cartPurchaseUnits, setCartPurchaseUnits] = useState({});
   const [productManualUnits, setProductManualUnits] = useState({});
-  const [adminEmail, setAdminEmail] = useState(ADMIN_EMAIL);
+  const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [admin, setAdmin] = useState(false);
   const [authMessage, setAuthMessage] = useState("");
@@ -732,13 +733,13 @@ export default function App() {
 
   async function resetCustomerPassword(customerRow) {
     if (!window.confirm(`Generate a temporary password for ${customerRow.full_name || customerRow.username}?`)) return;
-    setResetCustomerResult(null);
     const { data, error } = await supabase.functions.invoke("admin-customer-management", { body: { action: "reset", customer_id: customerRow.id } });
     if (error || !data?.temporary_password) {
       showNotice("Password reset failed. Deploy the admin-customer-management Edge Function and check its secrets.");
       return;
     }
     setResetCustomerResult({ id: customerRow.id, label: customerRow.full_name || customerRow.username, password: data.temporary_password });
+    setResetPasswordVisible(true);
     setAdminCustomers(rows => rows.map(row => row.id === customerRow.id ? { ...row, must_change_password: true } : row));
   }
 
@@ -883,6 +884,36 @@ export default function App() {
     updateOrder(order.id, { invoice, invoiceHistory: [...(order.invoiceHistory || []), { ...previous, archivedAt: new Date().toISOString() }], invoicePublishedAt: new Date().toISOString() });
     showNotice("Revised invoice saved and published to the customer account.");
   }
+  function deleteInvoice(order) {
+    if (!order.invoice) return;
+    if (!window.confirm("Archive this invoice? It will disappear from the customer dashboard. You can restore it later.")) return;
+    const previous = order.invoice;
+    updateOrder(order.id, {
+      invoice: null,
+      invoiceHistory: [...(order.invoiceHistory || []), { ...previous, archivedAt: new Date().toISOString(), archiveReason: "Admin archived invoice" }],
+      invoiceArchivedAt: new Date().toISOString(),
+    });
+    showNotice("Invoice archived and removed from the customer dashboard. It can be restored from Admin.");
+  }
+
+  function restoreInvoice(order) {
+    if (order.invoice) return;
+    const history = [...(order.invoiceHistory || [])];
+    if (!history.length) {
+      showNotice("No archived invoice is available to restore.");
+      return;
+    }
+    const archived = history.pop();
+    const { archivedAt, archiveReason, ...invoice } = archived;
+    updateOrder(order.id, {
+      invoice,
+      invoiceHistory: history,
+      invoicePublishedAt: new Date().toISOString(),
+      invoiceArchivedAt: null,
+    });
+    showNotice("Invoice restored and published to the customer dashboard.");
+  }
+
   function shareInvoice(order) {
     if (!order.invoice) return;
     const lines = order.invoice.items.map(item => `${item.name} — ${item.quantity} × ${item.unit} @ ${money(item.unitPrice)} = ${money(item.lineTotal)}`).join("\n");
@@ -977,8 +1008,7 @@ export default function App() {
           <button type="button" onClick={() => setView("recipes")}>📖 Recipe Book</button>
           <button type="button" onClick={() => setDukandarOpen(true)}>✨ Ask Dukandar</button>
           <button type="button" onClick={async () => { const url=window.location.origin; if(navigator.share) { try { await navigator.share({title:"Balaji Home Needs",text:"Shop everyday groceries with Balaji Home Needs",url}); } catch {} } else { await navigator.clipboard?.writeText(url); showNotice("App link copied. Share it with customers on WhatsApp."); } }}>↗ Share App</button>
-          <button onClick={() => setView("login-hub")}>♙ Login</button>
-          <button type="button" className="account-button" onClick={() => { setView(customerUser ? "account" : "login-hub"); setCustomerAuthMode("login"); }}>{customerUser ? "👤 My Account" : "👤 Login / Sign up"}</button>
+          <button type="button" className="account-button" onClick={() => { setView(customerUser ? "account" : "login-hub"); setCustomerAuthMode("login"); }}>{customerUser ? "👤 My Account" : "♙ Login"}</button>
           <button className="cart-button" onClick={() => setCheckout(true)}>🛒 Cart <b>{totalCartCount}</b></button>
         </div>
       </header>
@@ -1095,8 +1125,8 @@ export default function App() {
                 <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
                   <button className="primary-button" type="button" onClick={() => sendEstimate(o)}>💬 Save estimate & send WhatsApp</button>
                   <select value={o.status} onChange={e => updateOrder(o.id, {status:e.target.value})}>{statuses.map(s => <option key={s}>{s}</option>)}</select>
-                  {!o.invoice && <button type="button" className="primary-button" onClick={() => createInvoice(o)}>Generate & Publish Invoice</button>}
-                  {o.invoice && <><button type="button" className="back-button" onClick={() => editInvoice(o)}>Edit & Republish Invoice</button><button type="button" className="back-button" onClick={() => printInvoice(o)}>Preview / Save Invoice PDF</button><button type="button" className="primary-button" onClick={() => shareInvoice(o)}>Send Invoice on WhatsApp</button></>}
+                  {!o.invoice && <><button type="button" className="primary-button" onClick={() => createInvoice(o)}>Generate & Publish Invoice</button>{(o.invoiceHistory || []).length > 0 && <button type="button" className="back-button" onClick={() => restoreInvoice(o)}>Restore Archived Invoice</button>}</>}
+                  {o.invoice && <><button type="button" className="back-button" onClick={() => editInvoice(o)}>Edit & Republish Invoice</button><button type="button" className="back-button" onClick={() => printInvoice(o)}>Preview / Save Invoice PDF</button><button type="button" className="primary-button" onClick={() => shareInvoice(o)}>Send Invoice on WhatsApp</button><button type="button" className="delete-order-button" onClick={() => deleteInvoice(o)}>Delete / Archive Invoice</button></>}
                   <button type="button" className="delete-order-button" onClick={() => moveOrderToDeleted(o)}>Move to deleted</button>
                 </div>
                 {o.status === "Estimate Sent" && <p className="delivery-note">Waiting for customer confirmation on WhatsApp. Change status to “Customer Confirmed” only after they agree.</p>}
@@ -1116,7 +1146,7 @@ export default function App() {
               <div className="section-heading"><div><span className="eyebrow">CUSTOMER ACCOUNTS</span><h2>Customers & Password Assistance</h2></div><span>{adminCustomers.length} accounts</span></div>
               <p className="delivery-note">If a customer forgets their password, verify their identity by phone before generating a temporary password. The customer must change it after their next login.</p>
               <input value={customerSearch} onChange={e=>setCustomerSearch(e.target.value)} placeholder="Search by name, username or mobile number" style={{width:"100%",padding:10,margin:"12px 0",border:"1px solid #ccd8c8",borderRadius:9}} />
-              {resetCustomerResult && <div className="delivery-note" style={{background:"#eff8f0",border:"1px solid #b8dfbd",padding:14,borderRadius:10}}><b>Temporary password for {resetCustomerResult.label}</b><p style={{fontSize:20,fontWeight:800,letterSpacing:1,margin:"8px 0"}}>{resetCustomerResult.password}</p><button type="button" className="back-button" onClick={()=>{navigator.clipboard?.writeText(resetCustomerResult.password);showNotice("Temporary password copied. Share it privately with the verified customer.");}}>Copy temporary password</button><button type="button" className="back-button" onClick={()=>setResetCustomerResult(null)}>Hide password</button><small style={{display:"block",marginTop:8}}>Show this password only to the verified customer. It will not be displayed again after you hide it.</small></div>}
+              {resetCustomerResult && <div className="delivery-note" style={{background:"#eff8f0",border:"1px solid #b8dfbd",padding:14,borderRadius:10}}><b>Temporary password for {resetCustomerResult.label}</b><p style={{fontSize:16,fontWeight:800,letterSpacing:1,margin:"8px 0",fontFamily:"monospace"}}>{resetPasswordVisible ? resetCustomerResult.password : "••••••••••"}</p><button type="button" className="back-button" onClick={()=>setResetPasswordVisible(v=>!v)}>{resetPasswordVisible ? "Hide password" : "Show password"}</button><button type="button" className="back-button" onClick={()=>{navigator.clipboard?.writeText(resetCustomerResult.password);showNotice("Temporary password copied. Share it privately with the verified customer.");}}>Copy temporary password</button><small style={{display:"block",marginTop:8}}>This password stays here when hidden. It changes only when you generate a new temporary password.</small></div>}
               {adminCustomers.filter(c=>`${c.full_name||""} ${c.username||""} ${c.phone||""}`.toLowerCase().includes(customerSearch.toLowerCase())).map(c=><div className="manage-product" key={c.id}><span><b>{c.full_name || "Customer"}</b><br/><small>@{c.username || "no username"} · {c.phone || "No mobile"}</small></span><button type="button" className="back-button" onClick={()=>resetCustomerPassword(c)}>Generate temporary password</button></div>)}
               {!adminCustomers.length && <p className="empty">No registered customer accounts found yet. Customer profiles will appear here after registration.</p>}
             </section>

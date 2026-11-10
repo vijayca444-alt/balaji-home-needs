@@ -1,0 +1,18 @@
+BALAJI HOME NEEDS - UPDATE NOTES
+
+Included in this update:
+1. Admin email field starts blank. Admin must enter the authorised email; the app still checks it against VITE_ADMIN_EMAIL before attempting sign-in.
+2. Supabase client explicitly enables persistent sessions and automatic token refresh. A customer/admin normally remains signed in on the same device until logout or session/security expiry.
+3. Temporary password display now has a Show/Hide toggle. Hiding masks the password but keeps it available on the screen; it is replaced only after another successful Regenerate action.
+4. Temporary passwords are now 10 characters, randomly generated with uppercase, lowercase, numeric and symbol characters.
+5. Temporary-password reset still marks the profile must_change_password=true; the customer must set a personal password after signing in.
+6. Existing invoice generate/edit/archive/restore actions and single Login entry point are retained in the source.
+
+IMPORTANT DEPLOYMENT:
+- Copy your existing local .env file into the project root. Never upload .env or a Supabase service-role key to GitHub.
+- After updating source, redeploy the Supabase Edge Function:
+  supabase/functions/admin-customer-management/index.ts
+  Function name: admin-customer-management
+- The Edge Function needs the existing server-side Supabase secrets SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY and BALAJI_ADMIN_EMAIL.
+- Run npm.cmd install, then npm.cmd run build on Windows before deploying to Cloudflare Pages.
+- This package has not been successfully Vite-built in this environment because dependency installation timed out. Please run the build locally and share any error before publishing.

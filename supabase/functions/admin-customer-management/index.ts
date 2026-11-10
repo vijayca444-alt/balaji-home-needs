@@ -9,9 +9,16 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
   status, headers: { ...corsHeaders, "Content-Type": "application/json" },
 });
 function makeTemporaryPassword() {
-  const bytes = new Uint8Array(18);
-  crypto.getRandomValues(bytes);
-  return `BhN-${Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("")}-9a`;
+  const groups = ["ABCDEFGHJKLMNPQRSTUVWXYZ", "abcdefghijkmnopqrstuvwxyz", "23456789", "!@#$%"];
+  const alphabet = groups.join("");
+  const random = (max: number) => crypto.getRandomValues(new Uint32Array(1))[0] % max;
+  const chars = groups.map(group => group[random(group.length)]);
+  while (chars.length < 10) chars.push(alphabet[random(alphabet.length)]);
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = random(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join("");
 }
 
 Deno.serve(async (req) => {
