@@ -15,3 +15,7 @@ The React Compiler is not enabled on this template because of its impact on dev 
 
 If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
 Trigger fresh Cloudflare deployment
+
+
+## Customer login and password assistance
+See `CUSTOMER-LOGIN-SETUP.txt` for the current setup. Customers register with name, username, email, mobile and password; email confirmation is disabled; they log in using username or email + password. Forgot-password requests go to the store, where an authorised admin can issue a temporary password from the Customers & Passwords tab. Guest checkout remains available.

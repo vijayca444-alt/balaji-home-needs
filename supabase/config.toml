@@ -1,0 +1,5 @@
+[functions.customer-login]
+verify_jwt = false
+
+[functions.admin-customer-management]
+verify_jwt = true

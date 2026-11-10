@@ -1,45 +1,77 @@
-BALAJI HOME NEEDS — FREE CUSTOMER LOGIN SETUP
+BALAJI HOME NEEDS — CUSTOMER LOGIN + STORE PASSWORD RESET
 
-WHAT THIS UPDATE ADDS
-- Customer sign-up using name, 10-digit mobile number, email and password.
-- Customer login and logout using Supabase email/password authentication.
-- Customer profile with a saved delivery address.
-- Customer-only order history for orders placed while signed in.
-- Guest checkout remains available; customers do not have to create an account.
-- Existing Admin login and dashboard remain separate.
-- No SMS OTP, paid auth provider or Play Store account is required.
+WHAT THIS UPDATE PROVIDES
+- Customer registration: full name, unique username, mobile number, email and password.
+- Email verification is NOT required. Customer can sign in immediately after registration.
+- Customer login accepts username OR email + password.
+- Forgot password message tells customers to contact the store.
+- Admin dashboard has a Customers & Passwords tab.
+- After verifying a customer's identity by phone, the admin can generate a temporary password.
+- The customer is prompted to change that temporary password after the next login.
+- Guest checkout remains available.
+- Existing store Admin login remains separate and unchanged.
 
-IMPORTANT: ONE-TIME SUPABASE DATABASE MIGRATION
-1. Open your Supabase project dashboard.
+STEP 1 — DATABASE MIGRATION (RUN ONCE)
+1. Open the Supabase project dashboard.
 2. Open SQL Editor > New query.
 3. Open CUSTOMER-LOGIN-SUPABASE-MIGRATION.sql from this project.
-4. Copy the complete SQL into the editor and click Run.
-5. Confirm that it completes without an error.
+4. Copy all SQL into the editor and click Run.
+5. Confirm it completes without errors.
 
-SUPABASE AUTH SETTINGS
-1. Open Authentication > Providers > Email and make sure Email provider is enabled.
-2. Open Authentication > URL Configuration.
-3. Set Site URL to: https://balaji-home-needs.pages.dev
-4. Add these Redirect URLs:
-   https://balaji-home-needs.pages.dev/**
-   http://localhost:5173/**
-5. Email confirmation can remain enabled. After signup, customers should open the confirmation email and then return to log in.
+STEP 2 — TURN OFF CUSTOMER EMAIL CONFIRMATION
+1. Supabase Dashboard > Authentication > Sign In / Providers > Email.
+2. Keep Email provider enabled.
+3. Turn OFF "Confirm email" / email confirmations.
+4. Save changes.
+This is required so signUp returns a session immediately. Customers still provide an email address, but they do not receive or need a verification email.
 
-DEPLOY
-1. Keep your existing .env file and Supabase URL/key unchanged.
-2. Build locally with: npm.cmd run build
-3. Publish the updated project to the same GitHub repository connected to Cloudflare Pages.
-4. Wait for Cloudflare Pages deployment to complete.
-5. Test signup, email confirmation, login, profile save, customer order history and guest checkout.
+STEP 3 — DEPLOY THE TWO EDGE FUNCTIONS (REQUIRED)
+These functions are needed for username login and secure admin password resets. They keep the Supabase service-role key on the server, never in the website.
 
-SECURITY NOTES
-- Customer profiles are protected by Row Level Security; each customer can read/update only their own profile.
-- Customers can read only orders whose customer_id matches their own Supabase Auth user ID.
-- Guest orders remain unlinked and cannot be viewed through a customer account.
-- Only the existing admin policy can update order statuses and estimates.
-- Do not put a Supabase service-role key in the website. Keep only the existing publishable/anon key in the frontend.
+Install/use Supabase CLI, then open PowerShell in this project folder and run:
+  npx supabase login
+  npx supabase link --project-ref mkmenxlmfcevtyzbnvfk
+
+Set the admin email secret to EXACTLY the same email as VITE_ADMIN_EMAIL in your .env file:
+  npx supabase secrets set BALAJI_ADMIN_EMAIL=your-admin-email@example.com
+
+Deploy both functions:
+  npx supabase functions deploy customer-login
+  npx supabase functions deploy admin-customer-management
+
+Supabase provides SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY to deployed Edge Functions. Never paste the service-role key into .env, React code, GitHub, or Cloudflare Pages.
+
+STEP 4 — FRONTEND ENVIRONMENT
+Keep the existing .env file at the project root (same folder as package.json). It should contain:
+  VITE_SUPABASE_URL=your-existing-project-url
+  VITE_SUPABASE_PUBLISHABLE_KEY=your-existing-publishable-key
+  VITE_ADMIN_EMAIL=the-same-admin-email-as-the-edge-function-secret
+  VITE_STORE_WHATSAPP=your-store-whatsapp-number
+Do not share the values publicly. Do not use a service-role/secret key in VITE_ variables.
+
+STEP 5 — BUILD AND DEPLOY
+  npm.cmd install
+  npm.cmd run build
+Then publish the updated project to the GitHub repository connected to Cloudflare Pages. Ensure Cloudflare Pages has the same VITE_ frontend environment variables and redeploy.
+
+HOW PASSWORD RESET WORKS
+1. Customer selects "Forgot password? Contact store" and contacts the store.
+2. Store verifies the customer's identity using known order/mobile details; do not reset solely because someone knows a username.
+3. Admin signs into the existing Admin dashboard > Customers & Passwords.
+4. Search the customer and click Generate temporary password.
+5. Share the one-time temporary password privately with the verified customer.
+6. On the customer's next login, the account page requires them to set a new password.
+7. Hide the temporary password in the admin screen after sharing it. It is displayed only in the current admin session.
+
+SECURITY
+- Customer passwords are managed by Supabase Auth; this project never stores plaintext passwords.
+- Username-to-email resolution happens in the server-side customer-login Edge Function.
+- The admin-customer-management Edge Function checks the signed-in admin email before listing customers or resetting passwords.
+- The service-role key is only available inside Supabase Edge Functions.
+- Customer profile and order RLS policies restrict customers to their own data. Admin customer listing is not exposed directly through the browser database API.
+- A temporary password should be delivered only after checking the customer's identity. Do not send it to an unverified requester.
 
 COST
-- Email/password authentication has no separate per-login charge, subject to your Supabase plan limits.
-- Supabase Free has usage limits. Its default email delivery is rate-limited; for larger public launches, a custom SMTP service may be needed and may have its own pricing.
-- SMS OTP is intentionally not included to avoid SMS costs.
+- Email/password authentication, username login and Edge Functions are covered by the Supabase Free plan within its usage limits.
+- No SMS OTP or SMTP verification email is used for signup.
+- Supabase Free plan limits still apply; review current usage in your dashboard.

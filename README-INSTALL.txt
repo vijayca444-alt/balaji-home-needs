@@ -1,18 +1,19 @@
-BALAJI HOME NEEDS - FRIENDLIER ASK DUKANDAR CHAT UPDATE
+BALAJI HOME NEEDS — UPDATED PROJECT INSTALL
 
-1. Back up your current src/App.jsx.
-2. Replace src/App.jsx with the App.jsx in this package.
-3. Keep your existing src/RecipeBookDukandar.css (or use the included file if this is the same latest design package).
-4. IMPORTANT: Keep your existing public/dukandar-avatar.png unchanged. This package does not replace the character image.
-5. Run npm run dev and test the assistant popup.
+1. Extract this ZIP into a new folder.
+2. Copy your existing .env file into this folder (same level as package.json). Do not upload it to GitHub.
+3. Run in PowerShell:
+     npm.cmd install
+     npm.cmd run build
+     npm.cmd run dev
+4. Complete the Supabase steps in CUSTOMER-LOGIN-SETUP.txt before testing customer registration, username login or admin password reset.
+5. Run CUSTOMER-LOGIN-SUPABASE-MIGRATION.sql once in Supabase SQL Editor.
+6. Deploy the customer-login and admin-customer-management Edge Functions using Supabase CLI.
+7. Turn OFF Supabase Email "Confirm email" so customers can create accounts without a verification email.
+8. Test locally, then publish to the existing GitHub repository and deploy through Cloudflare Pages.
 
-NEW CHAT BEHAVIOUR
-- Ask for a recipe by name (example: "How do I make Lemon Rice?"). Dukandar shows the recipe ingredients and asks whether to add them.
-- Reply "Yes, add them" to add the recipe ingredients to the cart.
-- Say "Add rice to my cart" to add a catalogue item directly.
-- Say "Add 2 avocados to my cart" to add a quantity.
-- If the item is not in the catalogue, it is still added as a custom item request for the shop team to confirm availability and price.
-- Asking about an item does not add it until the customer confirms.
-
-NOTE
-This is a friendly catalogue/recipe-aware assistant workflow using the recipes and products currently in the website. It is not a live generative AI connection. A real AI service requires a secure backend/API integration.
+IMPORTANT
+- Keep your current .env values private.
+- Do not replace or expose the Supabase service-role key in frontend code.
+- Keep your current Admin login credentials safe.
+- Guest checkout remains available.

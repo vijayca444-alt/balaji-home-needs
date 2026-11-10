@@ -225,10 +225,16 @@ export default function App() {
   const [submittedOrderId, setSubmittedOrderId] = useState("");
   const [customer, setCustomer] = useState({ name: "", phone: "", address: "" });
   const [customerUser, setCustomerUser] = useState(null);
-  const [customerProfile, setCustomerProfile] = useState({ full_name: "", phone: "", address: "" });
+  const [customerProfile, setCustomerProfile] = useState({ full_name: "", username: "", phone: "", address: "", must_change_password: false });
+  const [mustChangeCustomerPassword, setMustChangeCustomerPassword] = useState(false);
+  const [newCustomerPassword, setNewCustomerPassword] = useState("");
+  const [confirmCustomerPassword, setConfirmCustomerPassword] = useState("");
+  const [adminCustomers, setAdminCustomers] = useState([]);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [resetCustomerResult, setResetCustomerResult] = useState(null);
   const [customerOrders, setCustomerOrders] = useState([]);
   const [customerAuthMode, setCustomerAuthMode] = useState("login");
-  const [customerAuthForm, setCustomerAuthForm] = useState({ name: "", phone: "", email: "", password: "" });
+  const [customerAuthForm, setCustomerAuthForm] = useState({ name: "", username: "", phone: "", email: "", identifier: "", password: "" });
   const [customerAuthBusy, setCustomerAuthBusy] = useState(false);
   const [customItem, setCustomItem] = useState("");
   const [customQty, setCustomQty] = useState("1");
@@ -296,14 +302,16 @@ export default function App() {
     let alive = true;
     (async () => {
       const { data: profile, error: profileError } = await supabase.from("customer_profiles")
-        .select("full_name,phone,address").eq("id", customerUser.id).maybeSingle();
+        .select("full_name,username,phone,address,must_change_password").eq("id", customerUser.id).maybeSingle();
       if (!alive) return;
       let savedProfile = profile;
       if (!savedProfile) {
         savedProfile = {
           full_name: customerUser.user_metadata?.full_name || "",
+          username: customerUser.user_metadata?.username || "",
           phone: customerUser.user_metadata?.phone || "",
-          address: ""
+          address: "",
+          must_change_password: false
         };
         const { error: createError } = await supabase.from("customer_profiles").upsert({
           id: customerUser.id, ...savedProfile, updated_at: new Date().toISOString()
@@ -311,6 +319,7 @@ export default function App() {
         if (createError) showNotice("Profile setup needs the Customer Login SQL migration: " + createError.message);
       }
       setCustomerProfile(savedProfile);
+      setMustChangeCustomerPassword(!!savedProfile.must_change_password);
       setCustomer(old => ({
         ...old,
         name: savedProfile.full_name || old.name,
@@ -350,6 +359,15 @@ export default function App() {
       setOrders((data || []).filter(r => !r.is_deleted).map(r => r.payload));
       setDeletedOrders((data || []).filter(r => r.is_deleted).map(r => r.payload));
     });
+  }, [admin]);
+
+  useEffect(() => {
+    if (!supabaseReady || !admin) return;
+    supabase.functions.invoke("admin-customer-management", { body: { action: "list" } })
+      .then(({ data, error }) => {
+        if (error || data?.error) { showNotice("Could not load customer accounts. Deploy the admin-customer-management Edge Function and check its admin email setting."); return; }
+        setAdminCustomers(data?.customers || []);
+      });
   }, [admin]);
 
   function captureLocation() {
@@ -625,43 +643,92 @@ export default function App() {
     e.preventDefault();
     if (!supabaseReady) { showNotice("Customer accounts require your existing Supabase connection. Configure it first."); return; }
     const email = customerAuthForm.email.trim().toLowerCase();
+    const username = customerAuthForm.username.trim().toLowerCase();
+    const identifier = customerAuthForm.identifier.trim();
     const password = customerAuthForm.password;
     if (password.length < 8) { showNotice("Please use a password with at least 8 characters."); return; }
     if (customerAuthMode === "signup") {
       if (!customerAuthForm.name.trim() || !/^[6-9]\d{9}$/.test(customerAuthForm.phone)) {
         showNotice("Enter your name and a valid 10-digit Indian mobile number."); return;
       }
+      if (!/^[a-z0-9_]{3,20}$/.test(username)) {
+        showNotice("Choose a username with 3–20 letters, numbers or underscores."); return;
+      }
+      if (!email || !email.includes("@")) { showNotice("Enter a valid email address."); return; }
+    } else if (!identifier) {
+      showNotice("Enter your username or email address."); return;
     }
     setCustomerAuthBusy(true);
     try {
       if (customerAuthMode === "signup") {
+        const { data: usernameCheck, error: usernameCheckError } = await supabase.functions.invoke("customer-login", { body: { action: "check-username", username } });
+        if (usernameCheckError) throw new Error("Username availability service is not deployed yet. Please finish the Supabase Edge Function setup.");
+        if (!usernameCheck?.available) throw new Error("That username is already taken. Please choose another username.");
         const { data, error } = await supabase.auth.signUp({
           email, password,
-          options: { data: { full_name: customerAuthForm.name.trim(), phone: customerAuthForm.phone } }
+          options: { data: { full_name: customerAuthForm.name.trim(), username, phone: customerAuthForm.phone } }
         });
         if (error) throw error;
-        if (data.session && data.user) {
-          const profile = { id: data.user.id, full_name: customerAuthForm.name.trim(), phone: customerAuthForm.phone, address: "", updated_at: new Date().toISOString() };
-          const { error: profileError } = await supabase.from("customer_profiles").upsert(profile);
-          if (profileError) throw profileError;
-          setCustomerProfile({ full_name: profile.full_name, phone: profile.phone, address: "" });
-          setCustomer({ name: profile.full_name, phone: profile.phone, address: "" });
-          setView("account");
-          showNotice("Your customer account has been created.");
-        } else {
-          setCustomerAuthMode("login");
-          showNotice("Account created. Check your email, verify your address, then log in.");
+        if (!data.session || !data.user) {
+          throw new Error("Email confirmation is still enabled in Supabase. Turn OFF Confirm email in Authentication settings, then try again.");
         }
+        const profile = { id: data.user.id, full_name: customerAuthForm.name.trim(), username, phone: customerAuthForm.phone, address: "", must_change_password: false, updated_at: new Date().toISOString() };
+        const { error: profileError } = await supabase.from("customer_profiles").upsert(profile);
+        if (profileError) {
+          await supabase.auth.signOut();
+          if (profileError.code === "23505") throw new Error("That username is already taken. Please choose another username.");
+          throw profileError;
+        }
+        setCustomerProfile(profile);
+        setCustomer({ name: profile.full_name, phone: profile.phone, address: "" });
+        setCustomerUser(data.user);
+        setCustomerAuthForm({ name: "", username: "", phone: "", email: "", identifier: "", password: "" });
+        setView("account");
+        showNotice("Your account is ready. Welcome to Balaji Home Needs!");
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        setCustomerAuthForm({ name: "", phone: "", email: "", password: "" });
+        let signInResult;
+        if (identifier.includes("@")) {
+          signInResult = await supabase.auth.signInWithPassword({ email: identifier.toLowerCase(), password });
+        } else {
+          const { data, error } = await supabase.functions.invoke("customer-login", { body: { identifier, password } });
+          if (error) throw new Error("Username login service is not deployed yet. Please use your email, or contact the store.");
+          if (!data?.session) throw new Error(data?.error || "Invalid username or password.");
+          signInResult = await supabase.auth.setSession(data.session);
+        }
+        if (signInResult.error) throw signInResult.error;
+        setCustomerAuthForm({ name: "", username: "", phone: "", email: "", identifier: "", password: "" });
         setView("account");
         showNotice("Welcome back to Balaji Home Needs!");
       }
     } catch (error) {
       showNotice("Account error: " + (error.message || "Please try again."));
     } finally { setCustomerAuthBusy(false); }
+  }
+
+  async function changeTemporaryCustomerPassword(e) {
+    e.preventDefault();
+    if (newCustomerPassword.length < 8) { showNotice("Your new password must contain at least 8 characters."); return; }
+    if (newCustomerPassword !== confirmCustomerPassword) { showNotice("The passwords do not match."); return; }
+    const { error } = await supabase.auth.updateUser({ password: newCustomerPassword });
+    if (error) { showNotice("Could not update password: " + error.message); return; }
+    const { error: profileError } = await supabase.from("customer_profiles").update({ must_change_password: false, updated_at: new Date().toISOString() }).eq("id", customerUser.id);
+    if (profileError) { showNotice("Password changed, but account flag could not be updated. Contact the store."); return; }
+    setMustChangeCustomerPassword(false);
+    setCustomerProfile(old => ({ ...old, must_change_password: false }));
+    setNewCustomerPassword(""); setConfirmCustomerPassword("");
+    showNotice("Your password has been changed successfully.");
+  }
+
+  async function resetCustomerPassword(customerRow) {
+    if (!window.confirm(`Generate a temporary password for ${customerRow.full_name || customerRow.username}?`)) return;
+    setResetCustomerResult(null);
+    const { data, error } = await supabase.functions.invoke("admin-customer-management", { body: { action: "reset", customer_id: customerRow.id } });
+    if (error || !data?.temporary_password) {
+      showNotice("Password reset failed. Deploy the admin-customer-management Edge Function and check its secrets.");
+      return;
+    }
+    setResetCustomerResult({ id: customerRow.id, label: customerRow.full_name || customerRow.username, password: data.temporary_password });
+    setAdminCustomers(rows => rows.map(row => row.id === customerRow.id ? { ...row, must_change_password: true } : row));
   }
 
   async function saveCustomerProfile(e) {
@@ -673,11 +740,12 @@ export default function App() {
     const profile = {
       id: customerUser.id,
       full_name: customerProfile.full_name.trim(),
+      username: customerProfile.username || customerUser.user_metadata?.username || "",
       phone: customerProfile.phone,
       address: customerProfile.address.trim(),
       updated_at: new Date().toISOString()
     };
-    const { error } = await supabase.from("customer_profiles").upsert(profile);
+    const { error } = await supabase.from("customer_profiles").update(profile).eq("id", customerUser.id);
     if (error) { showNotice("Could not save profile: " + error.message); return; }
     setCustomer({ name: profile.full_name, phone: profile.phone, address: profile.address });
     showNotice("Your details and delivery address have been saved.");
@@ -924,19 +992,26 @@ export default function App() {
         <form className="login-card customer-login-card" onSubmit={submitCustomerAuth}>
           <div className="login-icon">👤</div><span className="eyebrow">BALAJI HOME NEEDS CUSTOMER ACCOUNT</span>
           <h2>{customerAuthMode === "signup" ? "Create your account" : "Customer login"}</h2>
-          <p>{customerAuthMode === "signup" ? "Save your details and view your previous grocery requests." : "Log in to access your saved address and order history."}</p>
-          {customerAuthMode === "signup" && <><input value={customerAuthForm.name} onChange={e => setCustomerAuthForm({ ...customerAuthForm, name: e.target.value })} placeholder="Full name" autoComplete="name" required /><input value={customerAuthForm.phone} onChange={e => setCustomerAuthForm({ ...customerAuthForm, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })} placeholder="10-digit mobile number" inputMode="numeric" autoComplete="tel" required /></>}
-          <input type="email" value={customerAuthForm.email} onChange={e => setCustomerAuthForm({ ...customerAuthForm, email: e.target.value })} placeholder="Email address" autoComplete="email" required />
+          <p>{customerAuthMode === "signup" ? "Create your account and save your grocery requests. No email verification required." : "Log in with your username or email and password."}</p>
+          {customerAuthMode === "signup" && <>
+            <input value={customerAuthForm.name} onChange={e => setCustomerAuthForm({ ...customerAuthForm, name: e.target.value })} placeholder="Full name" autoComplete="name" required />
+            <input value={customerAuthForm.username} onChange={e => setCustomerAuthForm({ ...customerAuthForm, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20) })} placeholder="Username (3–20 letters, numbers or _)" autoComplete="username" required />
+            <input value={customerAuthForm.phone} onChange={e => setCustomerAuthForm({ ...customerAuthForm, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })} placeholder="10-digit mobile number" inputMode="numeric" autoComplete="tel" required />
+            <input type="email" value={customerAuthForm.email} onChange={e => setCustomerAuthForm({ ...customerAuthForm, email: e.target.value })} placeholder="Email address" autoComplete="email" required />
+          </>}
+          {customerAuthMode === "login" && <input value={customerAuthForm.identifier} onChange={e => setCustomerAuthForm({ ...customerAuthForm, identifier: e.target.value })} placeholder="Username or email address" autoComplete="username" required />}
           <input type="password" value={customerAuthForm.password} onChange={e => setCustomerAuthForm({ ...customerAuthForm, password: e.target.value })} placeholder="Password (minimum 8 characters)" autoComplete={customerAuthMode === "signup" ? "new-password" : "current-password"} minLength={8} required />
-          <button className="primary-button" disabled={customerAuthBusy}>{customerAuthBusy ? "Please wait…" : customerAuthMode === "signup" ? "Create free account" : "Login"}</button>
+          <button className="primary-button" disabled={customerAuthBusy}>{customerAuthBusy ? "Please wait…" : customerAuthMode === "signup" ? "Create account" : "Login"}</button>
+          {customerAuthMode === "login" && <div className="delivery-note" style={{marginTop:8}}>Forgot password? Please contact Balaji Home Needs. After verifying your details, the store can issue a temporary password.{STORE_WHATSAPP && <div style={{marginTop:8}}><a href={`https://wa.me/${STORE_WHATSAPP}?text=${encodeURIComponent("Hello Balaji Home Needs, I forgot my customer account password. Please help me reset it.")}`} target="_blank" rel="noreferrer">Contact store on WhatsApp</a></div>}</div>}
           <button type="button" className="back-button" onClick={() => setCustomerAuthMode(customerAuthMode === "signup" ? "login" : "signup")}>{customerAuthMode === "signup" ? "Already registered? Login" : "New customer? Create an account"}</button>
           <button type="button" className="back-button" onClick={() => setView("shop")}>Continue as guest · Back to store</button>
-          <small className="delivery-note">Free email and password login. Email verification may be required. Guest checkout is always available.</small>
+          <small className="delivery-note">No email verification. Guest checkout is always available.</small>
         </form>
       </main>}
 
       {view === "account" && <main className="admin-page">
-        <div className="admin-heading"><div><span className="eyebrow">CUSTOMER ACCOUNT</span><h1>My Account</h1><p>{customerUser?.email}</p></div><div className="account-actions"><button className="back-button" onClick={() => setView("shop")}>← Continue shopping</button><button className="delete-order-button" onClick={customerLogout}>Logout</button></div></div>
+        <div className="admin-heading"><div><span className="eyebrow">CUSTOMER ACCOUNT</span><h1>My Account</h1><p>@{customerProfile.username || customerUser?.user_metadata?.username || customerUser?.email}</p></div><div className="account-actions"><button className="back-button" onClick={() => setView("shop")}>← Continue shopping</button><button className="delete-order-button" onClick={customerLogout}>Logout</button></div></div>
+        {mustChangeCustomerPassword && <section className="panel customer-profile-panel" style={{border:"2px solid #e3b341",background:"#fffaf0"}}><h2>Set your new password</h2><p>You are using a temporary password issued by the store. Please create a new password before continuing.</p><form className="customer-form" onSubmit={changeTemporaryCustomerPassword}><input type="password" minLength={8} autoComplete="new-password" value={newCustomerPassword} onChange={e=>setNewCustomerPassword(e.target.value)} placeholder="New password (at least 8 characters)" required /><input type="password" minLength={8} autoComplete="new-password" value={confirmCustomerPassword} onChange={e=>setConfirmCustomerPassword(e.target.value)} placeholder="Confirm new password" required /><button className="primary-button">Update password</button></form></section>}
         <section className="panel customer-profile-panel"><h2>My details & delivery address</h2><form className="customer-form" onSubmit={saveCustomerProfile}><input value={customerProfile.full_name} onChange={e => setCustomerProfile({ ...customerProfile, full_name: e.target.value })} placeholder="Full name" required /><input value={customerProfile.phone} onChange={e => setCustomerProfile({ ...customerProfile, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })} placeholder="10-digit mobile number" inputMode="numeric" required /><textarea value={customerProfile.address} onChange={e => setCustomerProfile({ ...customerProfile, address: e.target.value })} placeholder="Saved delivery address" /><button className="primary-button">Save my details</button></form></section>
         <section className="panel"><div className="section-heading"><h2>My previous orders</h2><span>{customerOrders.length} orders</span></div>{customerOrders.length ? customerOrders.map(order => <div className="order-card" key={order.id}><div className="order-top"><b>{order.id}</b><span>{order.date || "—"}</span><strong>{order.status || "Order Received"}</strong></div><p>{order.customer?.address || "Address not saved"}</p><div className="order-lines">{(order.items || []).map(item => <div key={item.id}>{item.name} × {item.quantity} {item.purchaseUnit || item.unit || ""}</div>)}{(order.customItems || []).map((item, index) => <div key={`${item.name}-${index}`}>Other: {item.name} — {item.quantity || 1} × {item.purchaseUnit || "item"}</div>)}</div></div>) : <p className="empty">No orders yet. Orders placed while logged in will appear here.</p>}</section>
       </main>}
@@ -945,7 +1020,7 @@ export default function App() {
         {!admin ? <form className="login-card" onSubmit={login}><div className="login-icon">🔐</div><h2>Store Admin</h2><p>Sign in using your authorised admin email and password.</p><input type="email" value={adminEmail} onChange={e => setAdminEmail(e.target.value)} placeholder="Admin email" required /><input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} placeholder="Admin password" autoComplete="current-password" required /><button className="primary-button">Login</button>{authMessage && <p className="delivery-note">{authMessage}</p>}<button type="button" className="back-button" onClick={() => setView("shop")}>← Back to store</button></form> :
           <>
             <div className="admin-heading"><div><span className="eyebrow">STORE MANAGEMENT</span><h1>Admin Dashboard</h1><p>Review requests, enter prices and send estimates on WhatsApp.</p></div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="back-button" onClick={() => { supabaseReady && supabase.auth.signOut(); setAdmin(false); setView("shop"); }}>← Store</button><button className="primary-button" onClick={() => { supabaseReady && supabase.auth.signOut(); setAdmin(false); setView("shop"); }}>Logout</button></div></div>
-            <nav style={{display:"flex",gap:8,flexWrap:"wrap",margin:"18px 0"}}>{[["overview","Overview"],["analytics","Analytics & EDA"],["orders","Orders"],["stock","Products & Stock"]].map(([id,label])=><button key={id} type="button" className={adminTab===id?"primary-button":"back-button"} onClick={()=>{setAdminTab(id); document.getElementById(id==="analytics"?"admin-analytics":id==="orders"?"admin-orders":id==="stock"?"admin-stock":"admin-overview")?.scrollIntoView({behavior:"smooth",block:"start"});}}>{label}</button>)}</nav>
+            <nav style={{display:"flex",gap:8,flexWrap:"wrap",margin:"18px 0"}}>{[["overview","Overview"],["analytics","Analytics & EDA"],["orders","Orders"],["stock","Products & Stock"],["customers","Customers & Passwords"]].map(([id,label])=><button key={id} type="button" className={adminTab===id?"primary-button":"back-button"} onClick={()=>{setAdminTab(id); document.getElementById(id==="analytics"?"admin-analytics":id==="orders"?"admin-orders":id==="stock"?"admin-stock":id==="customers"?"admin-customers":"admin-overview")?.scrollIntoView({behavior:"smooth",block:"start"});}}>{label}</button>)}</nav>
             <div className="stats-grid" id="admin-overview"><div><small>Total requests</small><h2>{orders.length}</h2></div><div><small>New requests</small><h2>{orders.filter(o => o.status === "Order Received").length}</h2></div><div><small>Awaiting confirmation</small><h2>{orders.filter(o => o.status === "Estimate Sent").length}</h2></div><div><small>Confirmed orders</small><h2>{orders.filter(o => ["Customer Confirmed","Preparing","Out for Delivery","Delivered"].includes(o.status)).length}</h2></div></div>
             <section className="panel analytics-panel" id="admin-analytics">
               <div className="section-heading"><div><span className="eyebrow">BUSINESS OVERVIEW</span><h2>Retail performance</h2></div><button className="primary-button" type="button" onClick={exportSalesCsv}>Download sales CSV</button></div>
@@ -981,6 +1056,14 @@ export default function App() {
               </form>
               <input value={adminProductSearch} onChange={e=>setAdminProductSearch(e.target.value)} placeholder="Search catalogue..." style={{width:"100%",padding:10,margin:"12px 0",border:"1px solid #ccd8c8",borderRadius:9}}/>
               {products.filter(p=>p.name.toLowerCase().includes(adminProductSearch.toLowerCase())).map(p => <div className="manage-product" key={p.id}><span>{p.emoji} {p.name} · {p.category}<br/><small>{p.paused ? "Paused — hidden from customers" : "Active — visible to customers"}</small></span><div style={{display:"flex",gap:8}}><button type="button" onClick={()=>toggleProductPause(p.id)}>{p.paused ? "Resume stock" : "Pause / Hide"}</button><button onClick={() => {if(window.confirm("Delete this product?")) setProducts(old => old.filter(x => x.id !== p.id));}}>Delete</button></div></div>)}
+            </section>
+            <section className="panel" id="admin-customers">
+              <div className="section-heading"><div><span className="eyebrow">CUSTOMER ACCOUNTS</span><h2>Customers & Password Assistance</h2></div><span>{adminCustomers.length} accounts</span></div>
+              <p className="delivery-note">If a customer forgets their password, verify their identity by phone before generating a temporary password. The customer must change it after their next login.</p>
+              <input value={customerSearch} onChange={e=>setCustomerSearch(e.target.value)} placeholder="Search by name, username or mobile number" style={{width:"100%",padding:10,margin:"12px 0",border:"1px solid #ccd8c8",borderRadius:9}} />
+              {resetCustomerResult && <div className="delivery-note" style={{background:"#eff8f0",border:"1px solid #b8dfbd",padding:14,borderRadius:10}}><b>Temporary password for {resetCustomerResult.label}</b><p style={{fontSize:20,fontWeight:800,letterSpacing:1,margin:"8px 0"}}>{resetCustomerResult.password}</p><button type="button" className="back-button" onClick={()=>{navigator.clipboard?.writeText(resetCustomerResult.password);showNotice("Temporary password copied. Share it privately with the verified customer.");}}>Copy temporary password</button><button type="button" className="back-button" onClick={()=>setResetCustomerResult(null)}>Hide password</button><small style={{display:"block",marginTop:8}}>Show this password only to the verified customer. It will not be displayed again after you hide it.</small></div>}
+              {adminCustomers.filter(c=>`${c.full_name||""} ${c.username||""} ${c.phone||""}`.toLowerCase().includes(customerSearch.toLowerCase())).map(c=><div className="manage-product" key={c.id}><span><b>{c.full_name || "Customer"}</b><br/><small>@{c.username || "no username"} · {c.phone || "No mobile"}</small></span><button type="button" className="back-button" onClick={()=>resetCustomerPassword(c)}>Generate temporary password</button></div>)}
+              {!adminCustomers.length && <p className="empty">No registered customer accounts found yet. Customer profiles will appear here after registration.</p>}
             </section>
 
           </>}
