@@ -861,10 +861,27 @@ export default function App() {
   }
   function createInvoice(order) {
     const items = [...(order.items || []), ...(order.customItems || [])];
-    if (!items.length || items.some(item => item.quotedPrice === "" || item.quotedPrice == null)) { showNotice("Enter all item prices and save the estimate before creating the invoice."); return; }
-    const invoice = { number: `BHN-INV-${String(order.id).replace(/[^0-9]/g, "").slice(-8)}`, date: new Date().toISOString(), total: getEstimate(order), items: items.map(item => ({ name:item.name, quantity:item.quantity || 1, unit:item.purchaseUnit || item.unit || "item", unitPrice:Number(item.quotedPrice), lineTotal:Number(item.quotedPrice) * (item.quantity || 1) })) };
-    updateOrder(order.id, { invoice, status: "Delivered", deliveredAt: new Date().toLocaleString("en-IN") });
-    showNotice("Invoice generated and published to the customer account.");
+    if (!items.length || items.some(item => item.quotedPrice === "" || item.quotedPrice == null || Number(item.quotedPrice) < 0)) { showNotice("Enter all item prices and save the estimate before creating the invoice."); return; }
+    const previous = order.invoice;
+    const invoice = { number: previous?.number || `BHN-INV-${String(order.id).replace(/[^0-9]/g, "").slice(-8)}`, date: new Date().toISOString(), version: (previous?.version || 0) + 1, status: "Published", total: getEstimate(order), items: items.map(item => ({ name:item.name, quantity:item.quantity || 1, unit:item.purchaseUnit || item.unit || "item", unitPrice:Number(item.quotedPrice), lineTotal:Number(item.quotedPrice) * (item.quantity || 1) })) };
+    const history = [...(order.invoiceHistory || []), ...(previous ? [{ ...previous, archivedAt: new Date().toISOString() }] : [])];
+    updateOrder(order.id, { invoice, invoiceHistory: history, invoicePublishedAt: new Date().toISOString() });
+    showNotice("Invoice generated and published. Order status was not changed.");
+  }
+  function editInvoice(order) {
+    if (!order.invoice) { createInvoice(order); return; }
+    const edited = order.invoice.items.map(item => {
+      const answer = window.prompt(`Unit price for ${item.name} (${item.quantity} ${item.unit})`, String(item.unitPrice));
+      if (answer === null) return null;
+      const unitPrice = Number(answer);
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) throw new Error("Enter a valid non-negative price.");
+      return { ...item, unitPrice, lineTotal: unitPrice * Number(item.quantity || 1) };
+    });
+    if (edited.some(item => item === null)) return;
+    const previous = order.invoice;
+    const invoice = { ...previous, date: new Date().toISOString(), version: (previous.version || 1) + 1, status: "Revised", items: edited, total: edited.reduce((sum, item) => sum + item.lineTotal, 0) };
+    updateOrder(order.id, { invoice, invoiceHistory: [...(order.invoiceHistory || []), { ...previous, archivedAt: new Date().toISOString() }], invoicePublishedAt: new Date().toISOString() });
+    showNotice("Revised invoice saved and published to the customer account.");
   }
   function shareInvoice(order) {
     if (!order.invoice) return;
@@ -1077,7 +1094,9 @@ export default function App() {
                 <div className="total-line"><b>Estimate total</b><strong>{money(getEstimate(o))}</strong></div>
                 <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
                   <button className="primary-button" type="button" onClick={() => sendEstimate(o)}>💬 Save estimate & send WhatsApp</button>
-                  <select value={o.status} onChange={e => updateOrder(o.id, {status:e.target.value})}>{statuses.map(s => <option key={s}>{s}</option>)}</select>{o.status === "Delivered" && !o.invoice && <button type="button" className="primary-button" onClick={() => createInvoice(o)}>Generate & Publish Invoice</button>}{o.invoice && <button type="button" className="back-button" onClick={() => printInvoice(o)}>Print / Save Invoice PDF</button>}
+                  <select value={o.status} onChange={e => updateOrder(o.id, {status:e.target.value})}>{statuses.map(s => <option key={s}>{s}</option>)}</select>
+                  {!o.invoice && <button type="button" className="primary-button" onClick={() => createInvoice(o)}>Generate & Publish Invoice</button>}
+                  {o.invoice && <><button type="button" className="back-button" onClick={() => editInvoice(o)}>Edit & Republish Invoice</button><button type="button" className="back-button" onClick={() => printInvoice(o)}>Preview / Save Invoice PDF</button><button type="button" className="primary-button" onClick={() => shareInvoice(o)}>Send Invoice on WhatsApp</button></>}
                   <button type="button" className="delete-order-button" onClick={() => moveOrderToDeleted(o)}>Move to deleted</button>
                 </div>
                 {o.status === "Estimate Sent" && <p className="delivery-note">Waiting for customer confirmation on WhatsApp. Change status to “Customer Confirmed” only after they agree.</p>}
