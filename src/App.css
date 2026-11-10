@@ -46,3 +46,10 @@ input,textarea,select{border:1px solid #dce6da;border-radius:10px;padding:12px 1
 .sales-bar-row span { color: #687568; font-size: .88rem; }
 .sales-bar-track { height: 11px; background: #edf1e9; border-radius: 20px; overflow: hidden; }
 .sales-bar-track i { display: block; height: 100%; background: linear-gradient(90deg,#527b43,#9ab86d); border-radius: inherit; }
+
+/* Flexible product quantity selection — no customer-facing prices */
+.product-quantity-options{display:grid;grid-template-columns:1fr;gap:7px;margin-top:12px}
+.product-quantity-options label{display:grid;gap:4px;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.2px}
+.product-quantity-options select,.product-quantity-options input{width:100%;min-width:0;padding:8px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font-size:12px}
+.product-quantity-options input::placeholder{color:#9aa69a}
+@media(max-width:700px){.product-quantity-options{gap:6px}.product-quantity-options label{font-size:9px}.product-quantity-options select,.product-quantity-options input{font-size:11px;padding:8px 7px}}

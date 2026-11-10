@@ -1,0 +1,10 @@
+.pwa-install-chip{position:fixed;z-index:120;left:16px;bottom:18px;display:flex;align-items:center;gap:10px;max-width:calc(100vw - 32px);padding:9px 11px 9px 9px;border:1px solid #d8e8d8;border-radius:16px;background:#fff;box-shadow:0 8px 28px #143d241f;color:#183b27;font-family:inherit}
+.pwa-install-mark{display:grid;place-items:center;flex:0 0 38px;width:38px;height:38px;border-radius:12px;background:#176b3a;color:#fff;font-weight:900;font-size:22px}
+.pwa-install-copy{display:grid;gap:2px;min-width:0}.pwa-install-copy strong{font-size:12px;white-space:nowrap}.pwa-install-copy small{font-size:10px;color:#66796a;white-space:nowrap}
+.pwa-install-chip button:not(.pwa-dismiss),.pwa-help-done{border:0;border-radius:10px;background:#176b3a;color:#fff;padding:9px 12px;font-size:12px;font-weight:800;cursor:pointer}
+.pwa-install-chip .pwa-dismiss{border:0;background:transparent;color:#718073;font-size:21px;line-height:1;padding:2px;cursor:pointer}
+.pwa-help-backdrop{position:fixed;inset:0;z-index:500;background:#0b2015a8;display:grid;place-items:center;padding:20px}
+.pwa-help-card{position:relative;width:min(390px,100%);padding:28px;border-radius:22px;background:#fff;color:#183b27;box-shadow:0 20px 70px #0003}
+.pwa-help-close{position:absolute;right:14px;top:12px;border:0;background:#f1f5ef;border-radius:50%;width:32px;height:32px;font-size:20px;cursor:pointer}
+.pwa-help-mark{width:54px;height:54px;font-size:29px;border-radius:16px}.pwa-help-card h2{margin:15px 0 10px;font-size:22px}.pwa-help-card ol{padding-left:22px;line-height:1.7;color:#506354;font-size:14px}.pwa-help-done{width:100%;margin-top:8px}
+@media(max-width:390px){.pwa-install-chip{left:10px;bottom:76px;max-width:calc(100vw - 20px)}}

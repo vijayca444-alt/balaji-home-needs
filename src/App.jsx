@@ -28,6 +28,24 @@ const initialProducts = [
 
 const money = n => "₹" + Number(n || 0).toFixed(2);
 
+function getQuantityOptions(product) {
+  const unit = String(product.unit || "").toLowerCase();
+  const category = String(product.category || "").toLowerCase();
+  if (/ml|litre|liter|\b1 l\b|\b2 l\b/.test(unit) || category.includes("oils") || /oil|cleaner|handwash|shampoo|milk|drink|water/.test(product.name || "")) {
+    return ["50 ml", "100 ml", "250 ml", "500 ml", "750 ml", "1 L", "2 L", "5 L"];
+  }
+  if (/piece|pack|bottle|set|dozen|bunch/.test(unit)) {
+    const base = unit.includes("dozen") ? ["1 Dozen", "2 Dozen", "3 Dozen"]
+      : unit.includes("bunch") ? ["1 Bunch", "2 Bunches", "3 Bunches"]
+      : unit.includes("set") ? ["1 Set", "2 Sets", "3 Sets"]
+      : unit.includes("bottle") ? ["1 Bottle", "2 Bottles", "3 Bottles", "6 Bottles"]
+      : unit.includes("piece") ? ["1 Piece", "2 Pieces", "3 Pieces", "6 Pieces", "12 Pieces"]
+      : ["1 Pack", "2 Packs", "3 Packs", "6 Packs", "12 Packs"];
+    return base;
+  }
+  return ["50 g", "100 g", "250 g", "500 g", "750 g", "1 kg", "2 kg", "5 kg", "10 kg"];
+}
+
 // Product-specific real-photo searches. Each item gets its own keyword and lock ID.
 // Photos are sourced from Flickr through LoremFlickr (not AI-generated).
 const productPhotoTags = {
@@ -212,6 +230,7 @@ export default function App() {
   const [customItems, setCustomItems] = useState([]);
   const [cartRecipeNeeds, setCartRecipeNeeds] = useState({});
   const [cartPurchaseUnits, setCartPurchaseUnits] = useState({});
+  const [productManualUnits, setProductManualUnits] = useState({});
   const [adminEmail, setAdminEmail] = useState(ADMIN_EMAIL);
   const [adminPassword, setAdminPassword] = useState("");
   const [admin, setAdmin] = useState(false);
@@ -337,6 +356,10 @@ export default function App() {
 
   function showNotice(message) { setNotice(message); setTimeout(() => setNotice(""), 3000); }
   function changeQty(id, amount) {
+    if (amount > 0 && !cartPurchaseUnits[id]) {
+      const product = products.find(item => item.id === id);
+      if (product) setCartPurchaseUnits(old => ({ ...old, [id]: product.unit || getQuantityOptions(product)[0] }));
+    }
     setCart(old => {
       const next = { ...old, [id]: Math.max(0, (old[id] || 0) + amount) };
       if (!next[id]) delete next[id];
@@ -668,10 +691,11 @@ export default function App() {
 
         <section className="products-section" id="products">
           <div className="section-heading"><div><span className="eyebrow">ADD WHAT YOU NEED</span><h2>{category === "All" ? "Browse all products" : category}</h2></div><span>{filteredProducts.length} items</span></div>
-          <div className="product-grid">{filteredProducts.map(p => <article className="product-card" key={p.id}>
+          <div className="product-grid">{filteredProducts.map(p => { const quantityOptions = getQuantityOptions(p); const selectedUnit = (productManualUnits[p.id] || "").trim() ? (p.unit || quantityOptions[0]) : (cartPurchaseUnits[p.id] || p.unit || quantityOptions[0]); return <article className="product-card" key={p.id}>
             <div className="product-picture"><img src={productPhotoUrl(p)} alt={`Real photo of ${p.name}`} loading="lazy" onError={e => { e.currentTarget.style.display = "none"; e.currentTarget.parentElement.classList.add("photo-unavailable"); }} /><span className="photo-unavailable-label">Photo unavailable</span></div><div className="product-info"><small>{p.category}</small><h3>{p.name}</h3><p>{p.unit}</p>
+              <div className="product-quantity-options"><label>Choose quantity<select aria-label={`Choose quantity for ${p.name}`} value={selectedUnit} onChange={e => { setProductManualUnits(old => ({...old,[p.id]:""})); setCartPurchaseUnits(old => ({...old,[p.id]:e.target.value})); }}>{Array.from(new Set([p.unit, ...quantityOptions].filter(Boolean))).map(option => <option key={option} value={option}>{option}</option>)}</select></label><label>Or enter manually<input aria-label={`Enter custom quantity for ${p.name}`} type="text" inputMode="text" placeholder="e.g. 150 g" value={productManualUnits[p.id] || ""} onChange={e => { const value = e.target.value; setProductManualUnits(old => ({...old,[p.id]:value})); if (value.trim()) setCartPurchaseUnits(old => ({...old,[p.id]:value.trim()})); else setCartPurchaseUnits(old => ({...old,[p.id]:p.unit || quantityOptions[0]})); }} /></label></div>
               <div className="product-bottom"><b>Add to cart</b>{cart[p.id] ? <div className="quantity"><button onClick={() => changeQty(p.id, -1)}>−</button><b>{cart[p.id]}</b><button onClick={() => changeQty(p.id, 1)}>+</button></div> : <button className="add-button" onClick={() => changeQty(p.id, 1)}>＋ Add</button>}</div>
-            </div></article>)}</div>
+            </div></article>})}</div>
           {!filteredProducts.length && <p className="empty">No products found. Try another search or request it below.</p>}
         </section>
         {customItems.length > 0 && <p className="custom-added">Requested: {customItems.map(item => `${item.name}: buying ${item.quantity} × ${item.purchaseUnit}${item.recipeNeed ? ` (recipe needs ${item.recipeNeed})` : ""}`).join(", ")} <button onClick={() => setCustomItems([])}>Clear</button></p>}
@@ -760,14 +784,14 @@ export default function App() {
 
       {dukandarOpen && <div className="dukandar-popup-backdrop" onClick={() => setDukandarOpen(false)}>
         <section className="dukandar-popup" role="dialog" aria-modal="true" aria-label="Ask Dukandar assistant" onClick={e => e.stopPropagation()}>
-          <div className="dukandar-popup-head"><div className="dukandar-popup-avatar"><img src="/dukandar-avatar.png" alt="Dukandar assistant" /></div><div><b>Ask Dukandar</b><small>Your friendly store assistant</small></div><button type="button" aria-label="Close Ask Dukandar" onClick={() => setDukandarOpen(false)}>✕</button></div>
+          <div className="dukandar-popup-head"><div className="dukandar-popup-avatar"><img src="/dukandar-mascot.png" alt="Dukandar assistant" /></div><div><b>Ask Dukandar</b><small>Your friendly store assistant</small></div><button type="button" aria-label="Close Ask Dukandar" onClick={() => setDukandarOpen(false)}>✕</button></div>
           <div className="dukandar-popup-body"><div className="dukandar-chat-history">{chatMessages.map((message,index)=><div key={index} className={message.role==="user"?"dukandar-chat-reply":"dukandar-chat-bubble"}>{message.text}</div>)}</div>
             <form onSubmit={askDukandar} className="dukandar-popup-form"><input autoFocus value={dukandarQuestion} onChange={e=>setDukandarQuestion(e.target.value)} placeholder="Ask for a recipe or say: Add rice to my cart..."/><button className="primary-button" type="submit">Send</button></form>
             <div className="dukandar-popup-links"><button type="button" onClick={()=>{setDukandarQuestion("Suggest a recipe for dinner");}}>🍽️ Suggest a recipe</button><button type="button" onClick={()=>{setDukandarOpen(false);setView("recipes");}}>📖 Open Recipe Book</button><button type="button" onClick={()=>{setDukandarOpen(false);setView("shop");}}>🛒 Browse groceries</button></div>
           </div>
         </section>
       </div>}
-      {!dukandarOpen && <button type="button" className="dukandar-floating-button" onClick={()=>setDukandarOpen(true)}><span><img src="/dukandar-avatar.png" alt="" /></span> Ask Dukandar</button>}
+      {!dukandarOpen && <button type="button" className="dukandar-floating-button" onClick={()=>setDukandarOpen(true)}><span><img src="/dukandar-mascot.png" alt="" /></span> Ask Dukandar</button>}
       <footer><b>BALAJI HOME NEEDS</b><p>Everyday essentials, delivered with care.</p><small>© {new Date().getFullYear()} Balaji Home Needs. All rights reserved.</small></footer>
       {count + customCount > 0 && view === "shop" && <button className="floating-cart" onClick={()=>setCheckout(true)}>🛒 View Cart · {totalCartCount} items</button>}
       {notice && <div className="toast">{notice}</div>}
